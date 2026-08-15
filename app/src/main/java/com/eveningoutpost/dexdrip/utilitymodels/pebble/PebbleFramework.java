@@ -6,15 +6,18 @@ import android.preference.PreferenceManager;
 
 import com.eveningoutpost.dexdrip.BestGlucose;
 import com.eveningoutpost.dexdrip.Home;
+import com.eveningoutpost.dexdrip.cgm.medtrum.SensorState;
 import com.eveningoutpost.dexdrip.models.ActiveBgAlert;
 import com.eveningoutpost.dexdrip.models.BgReading;
 import com.eveningoutpost.dexdrip.models.JoH;
 import com.eveningoutpost.dexdrip.models.UserError.Log;
+import com.eveningoutpost.dexdrip.services.Ob1G5CollectionService;
 import com.eveningoutpost.dexdrip.utilitymodels.BgGraphBuilder;
 import com.eveningoutpost.dexdrip.utilitymodels.BgSparklineBuilder;
 import com.eveningoutpost.dexdrip.utilitymodels.Constants;
 import com.eveningoutpost.dexdrip.utilitymodels.Pref;
 import com.eveningoutpost.dexdrip.utilitymodels.SimpleImageEncoder;
+import com.eveningoutpost.dexdrip.g5model.SensorDays;
 import com.getpebble.android.kit.PebbleKit;
 import com.getpebble.android.kit.util.PebbleDictionary;
 import com.getpebble.android.kit.util.PebbleTuple;
@@ -284,8 +287,16 @@ public class PebbleFramework extends PebbleDisplayAbstract {
             }
 
             // TODO I think special message is only appropriate with flat trend
+            long TimeLeft = SensorDays.get().getRemainingSensorPeriodInMs();
             if (bgReadingS.equalsIgnoreCase(msg)) {
                 this.dictionary.addString(MESSAGE_KEY, PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_text", "BAZINGA!"));
+            } else if(TimeLeft < (24*60*60*1000)) {
+                int hoursLeft = Math.toIntExact(TimeLeft / 1000 / 60 / 60);
+                int minutesLeft = Math.toIntExact(TimeLeft - (hoursLeft * 60 * 60 * 100) / (1000 / 60));
+                this.dictionary.addString(MESSAGE_KEY, "Expires: " + hoursLeft + ":" + minutesLeft);
+            } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart()))) {
+                this.dictionary.addString(MESSAGE_KEY, "Wait " + (SensorDays.get().getWarmupMs()/(1000/60/60)) + " min" );
+                //this.dictionary.addString(BG_DELTA_KEY,"Warming Up");
             } else {
                 this.dictionary.addString(MESSAGE_KEY, "");
             }
