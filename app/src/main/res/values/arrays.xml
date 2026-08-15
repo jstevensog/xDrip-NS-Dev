@@ -92,6 +92,7 @@
         <item>Color Trend Watchface</item>
         <item>Pebble Classic Trend Watchface</item>
         <item>Pebble Trend Clay Version (All Models)</item>
+        <item>Pebble Framework (New standard comms)</item>
     </string-array>
     <string-array name="SendToPebbleChoiceValues">
 
