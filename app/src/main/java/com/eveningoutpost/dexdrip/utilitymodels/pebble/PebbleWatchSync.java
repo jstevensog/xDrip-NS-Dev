@@ -90,6 +90,7 @@ public class PebbleWatchSync extends ForegroundService {
             pebbleDisplays.put(PebbleDisplayType.Trend, new PebbleDisplayTrendOld());
             pebbleDisplays.put(PebbleDisplayType.TrendClassic, new PebbleDisplayTrendOld());
             pebbleDisplays.put(PebbleDisplayType.TrendClay, new PebbleDisplayTrend());
+            pebbleDisplays.put(PebbleDisplayType.PebbleFramework, new PebbleFramework());
         }
 
         for (PebbleDisplayInterface pdi : pebbleDisplays.values()) {

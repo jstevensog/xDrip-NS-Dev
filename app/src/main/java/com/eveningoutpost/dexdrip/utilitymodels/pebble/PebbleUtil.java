@@ -66,6 +66,8 @@ public class PebbleUtil {
 
             case 5:
                 return PebbleDisplayType.TrendClay;
+            case 6:
+                return PebbleDisplayType.PebbleFramework;
 
             default:
                 return PebbleDisplayType.None;
