@@ -53,6 +53,25 @@ public abstract class PebbleDisplayAbstract implements PebbleDisplayInterface {
     protected static final int VERSION_KEY = 1002;
     protected static final int TREND_SIZE = 1003;
 
+    protected static final int FRAMEWORK_HEARTBEAT = 2000;
+    protected static final int FRAMEWORK_BGL_DELTA = 2001;
+
+    protected static final int FRAMEWORK_BGL_VALUE = 2002;
+
+    protected static final int FRAMEWORK_PHONEBAT = 2003;
+
+    protected static final int FRAMEWORK_MESSAGE = 2004;
+
+    protected static final int FRAMEWORK_HIGHLIMIT = 2005;
+
+    protected static final int FRAMEWORK_LOWLIMIT = 2006;
+
+    protected static final int FRAMEWORK_VIBE = 2007;
+
+    protected static final int FRAMEWORK_SLOPEVAL = 2008;
+
+    protected static final int FRAMEWORK_BGL_SERIES = 2009;
+
 
     protected static final int MAX_VALUES =60*24;
 
@@ -163,6 +182,38 @@ public abstract class PebbleDisplayAbstract implements PebbleDisplayInterface {
             return arrow_name;
 
         return "0";
+    }
+
+    public byte getSlopeOrdinalUint8() {
+        if ((use_best_glucose && dg == null) || (!use_best_glucose && this.bgReading == null))
+            return 0;
+
+        final String arrow_name = (use_best_glucose ? dg.delta_name : this.bgReading.slopeName());
+        if (arrow_name.equalsIgnoreCase("DoubleDown"))
+            return 7;
+
+        if (arrow_name.equalsIgnoreCase("SingleDown"))
+            return 6;
+
+        if (arrow_name.equalsIgnoreCase("FortyFiveDown"))
+            return 5;
+
+        if (arrow_name.equalsIgnoreCase("Flat"))
+            return 4;
+
+        if (arrow_name.equalsIgnoreCase("FortyFiveUp"))
+            return 3;
+
+        if (arrow_name.equalsIgnoreCase("SingleUp"))
+            return 2;
+
+        if (arrow_name.equalsIgnoreCase("DoubleUp"))
+            return 1;
+
+        if (arrow_name.equalsIgnoreCase("9"))
+            return 9;
+
+        return 0;
     }
 
 
