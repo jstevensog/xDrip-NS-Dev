@@ -2285,7 +2285,7 @@ public class Preferences extends BasePreferenceActivity implements SearchPrefere
                 watchCategory.removePreference(pebbleSpecialText);
             }
 
-            if ((currentPebbleSync != 3) && (currentPebbleSync != 4) && (currentPebbleSync != 5)) {
+            if ((currentPebbleSync != 3) && (currentPebbleSync != 4) && (currentPebbleSync != 5) && (currentPebbleSync != 6)) {
                 watchCategory.removePreference(pebbleTrend);
                 watchCategory.removePreference(pebbleFilteredLine);
                 watchCategory.removePreference(pebbleTinyDots);
@@ -2358,7 +2358,7 @@ public class Preferences extends BasePreferenceActivity implements SearchPrefere
                         }
 
                         // Add New one
-                        if ((pebbleType == 3) || (pebbleType == 4) || (pebbleType == 5)) {
+                        if ((pebbleType == 3) || (pebbleType == 4) || (pebbleType == 5) || (pebbleType == 6)) {
                             watchCategory.addPreference(pebbleTrend);
                             watchCategory.addPreference(pebbleFilteredLine);
                             watchCategory.addPreference(pebbleTinyDots);

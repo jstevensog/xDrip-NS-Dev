@@ -1,5 +1,9 @@
 package com.eveningoutpost.dexdrip.utilitymodels.pebble;
 
+import static com.eveningoutpost.dexdrip.models.JoH.tolerantParseDouble;
+import static com.eveningoutpost.dexdrip.models.JoH.tolerantParseInt;
+
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.os.PowerManager;
 import android.preference.PreferenceManager;
@@ -26,6 +30,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Dictionary;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.UUID;
@@ -65,7 +70,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
     public static final int VERSION_KEY = 1002;
     */
     private static final int CHUNK_SIZE = 100;
-    public static final boolean d = false;
+    public static final boolean d = true;
 
     private static byte last_collect_health_key_byte = 0x1A;
     private static byte last_bluetooth_key_byte = 0x1A;
@@ -96,6 +101,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
     private static short sendStep = 5;
     private final PebbleDictionary dictionary = new PebbleDictionary();
 
+    protected boolean heartBeat = false;
 
     @Override
     public void startDeviceCommand() {
@@ -166,26 +172,109 @@ public class PebbleFramework extends PebbleDisplayAbstract {
     private void evaluateDataFromPebble(PebbleDictionary data) {
 
         try {
-        if (data.size() > 0) {
-            pebble_sync_value = data.getUnsignedIntegerAsLong(SYNC_KEY);
-            pebble_platform = data.getUnsignedIntegerAsLong(PLATFORM_KEY);
-            pebble_app_version = data.getString(VERSION_KEY);
-            pebble_trend_size = data.getUnsignedIntegerAsLong(TREND_SIZE);
-            Log.d(TAG, "receiveData: pebble_sync_value=" + pebble_sync_value + ", pebble_platform=" + pebble_platform + ", pebble_app_version=" + pebble_app_version + ", pebble_trend_size=" +pebble_trend_size);
+            if (data.size() > 0 && data.contains(FRAMEWORK_HEARTBEAT)) {
+                // set heartbeat protocol
+                this.heartBeat = true;
+                // heartbeat message struct
+                long hb = data.getUnsignedIntegerAsLong(FRAMEWORK_HEARTBEAT);
+                Log.d(TAG, "Heartbeat received: " + Long.toHexString(hb));
+                // old fashioned decoding of bitarrays
+                boolean colour = (hb & 0x80000000) != 0;
+                boolean time_series = (hb & 0x40000000) != 0;
+                long time_period = (hb & 0x30000000) >> 28;
+                boolean high_limit = (hb & 0x08000000) != 0;
+                boolean low_limit = (hb & 0x04000000) != 0;
+                boolean small_dots = (hb & 0x02000000) != 0;
+                boolean send_iob = (hb & 0x01000000) != 0;
+                boolean send_pump_state = (hb & 0x00800000) != 0;
+                boolean send_pump_battery = (hb & 0x00200000) != 0;
+                boolean send_delta_value = (hb & 0x00100000) != 0;
+                boolean send_slope_arrow = (hb & 0x00080000) != 0;
+                boolean send_phone_battery = (hb & 0x00400000) != 0;
+                Log.d(TAG, "Framework heartbeat: Colour=" + colour
+                        + " time_series=" + time_series
+                        + " time_period=" + time_period
+                        + " high_limit=" + high_limit
+                        + " low_limit=" + low_limit
+                        + " small_dots=" + small_dots
+                        + " send_iob=" + send_iob
+                        + " send_pump_state=" + send_pump_state
+                        + " send_pump_battery=" + send_pump_battery
+                        + " send_delta_value=" + send_delta_value
+                        + " send_slope_arrow=" + send_slope_arrow
+                        + " send_phone_battery=" + send_phone_battery
+                );
 
-            switch ((int) pebble_platform) {
-                case 0:
-                    if (PebbleUtil.pebbleDisplayType != PebbleDisplayType.TrendClassic) {
-                        PebbleUtil.pebbleDisplayType = PebbleDisplayType.TrendClassic;
-                        //JoH.static_toast_short("Switching to Pebble Classic Trend");
-                        Log.d(TAG, "Changing to Classic Trend due to platform id");
+                PebbleDictionary dict = new PebbleDictionary();
+
+
+                if (send_slope_arrow) {
+                    if (!getBooleanValue("pebble_show_arrows") || no_signal) {
+                        dict.addUint8(FRAMEWORK_SLOPEVAL, (byte)0);
+                    } else {
+                        dict.addUint8(FRAMEWORK_SLOPEVAL, getSlopeOrdinalUint8());
                     }
-                    break;
-            }
+                }
+                SharedPreferences perfs = PreferenceManager.getDefaultSharedPreferences(context);
+                if (high_limit) dict.addUint16(FRAMEWORK_HIGHLIMIT, (short) tolerantParseInt(perfs.getString("highValue", "170"), 170));
+                if (low_limit) dict.addUint16(FRAMEWORK_LOWLIMIT, (short) tolerantParseInt(perfs.getString("lowValue", "170"), 170));
+                if (send_phone_battery) dict.addUint16(FRAMEWORK_PHONEBAT, (byte) getBatteryLevel());
 
-        } else {
-            Log.d(TAG, "receiveData: pebble_app_version not known");
-        }
+                if (send_delta_value) {
+                    short value = 0;
+                    if (use_best_glucose) {
+                        if (dg.delta_mgdl < 0.0) {
+                            value = (short) (-1.0 * dg.delta_mgdl);
+                            value |= 0x4000;
+                        } else {
+                            value = (short) dg.delta_mgdl;
+                        }
+                    } else {
+                        String deltastring = this.bgGraphBuilder.unitizedDeltaString(false, true);
+                        if (deltastring.contains("?")) {
+                            value = 0x3FFF;
+                        } else {
+                            float bgfloat = Float.parseFloat(deltastring);
+                            if (bgfloat < 0.0) {
+                                value = (short) (-1.0 * bgfloat);
+                                value |= 0x2000;
+                            } else {
+                                value = (short) bgfloat;
+                            }
+                        }
+                    }
+                    if (getBooleanValue("pebble_show_delta_units")) {
+                        value |= 0x4000;
+                    }
+                    if (!Pref.getString("units", "mgdl").equals("mgdl")) {
+                        value |= 0x8000;
+                    }
+                    Log.d(TAG, "Value: " + Integer.toHexString((int) value));
+                    dict.addUint16(FRAMEWORK_BGL_DELTA, value);
+                }
+
+                sendDataToPebble(dict);
+
+            } else if (data.size() > 0) {
+                pebble_sync_value = data.getUnsignedIntegerAsLong(SYNC_KEY);
+                pebble_platform = data.getUnsignedIntegerAsLong(PLATFORM_KEY);
+                pebble_app_version = data.getString(VERSION_KEY);
+                pebble_trend_size = data.getUnsignedIntegerAsLong(TREND_SIZE);
+                Log.d(TAG, "receiveData: pebble_sync_value=" + pebble_sync_value + ", pebble_platform=" + pebble_platform + ", pebble_app_version=" + pebble_app_version + ", pebble_trend_size=" +pebble_trend_size);
+
+                switch ((int) pebble_platform) {
+                    case 0:
+                        if (PebbleUtil.pebbleDisplayType != PebbleDisplayType.TrendClassic) {
+                            PebbleUtil.pebbleDisplayType = PebbleDisplayType.TrendClassic;
+                            //JoH.static_toast_short("Switching to Pebble Classic Trend");
+                            Log.d(TAG, "Changing to Classic Trend due to platform id");
+                        }
+                        break;
+                }
+
+            } else {
+                Log.d(TAG, "receiveData: pebble_app_version not known");
+            }
         } catch (NullPointerException e) {
             Log.e(TAG, "Got exception trying to parse data from pebble: " + e);
         }
@@ -546,17 +635,18 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
                     if (d)
                         Log.i(TAG, "sendData: messageInTransit= " + messageInTransit + ", transactionFailed= " + transactionFailed + ", sendStep= " + sendStep);
-                    if (sendStep == 0 && !messageInTransit && !transactionOk && !transactionFailed) {
+                    if (sendStep == 0 && !messageInTransit && !transactionOk && !transactionFailed && !heartBeat) {
 
                         if (use_best_glucose) {
                             this.dg = BestGlucose.getDisplayGlucose();
-                            } else {
+                        } else {
                             this.bgReading = BgReading.last();
                         }
 
                         sendingData = true;
-                        buildDictionary();
-                        sendDownload();
+                        // Do not send anything, use heartbeat protocol
+                        //buildDictionary();
+                        //sendDownload();
                     }
 
 
