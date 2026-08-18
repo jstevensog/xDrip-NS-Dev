@@ -28,9 +28,9 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.Dictionary;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.UUID;
@@ -210,15 +210,46 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
                 if (send_slope_arrow) {
                     if (!getBooleanValue("pebble_show_arrows") || no_signal) {
-                        dict.addUint8(FRAMEWORK_SLOPEVAL, (byte)0);
+                        dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 0);
                     } else {
                         dict.addUint8(FRAMEWORK_SLOPEVAL, getSlopeOrdinalUint8());
                     }
                 }
                 SharedPreferences perfs = PreferenceManager.getDefaultSharedPreferences(context);
-                if (high_limit) dict.addUint16(FRAMEWORK_HIGHLIMIT, (short) tolerantParseInt(perfs.getString("highValue", "170"), 170));
-                if (low_limit) dict.addUint16(FRAMEWORK_LOWLIMIT, (short) tolerantParseInt(perfs.getString("lowValue", "170"), 170));
-                if (send_phone_battery) dict.addUint16(FRAMEWORK_PHONEBAT, (byte) getBatteryLevel());
+                if (high_limit) {
+                    short high_line = 0;
+                    // the hig/low line values are set as strings and can thus be in mmol/l
+                    if (Double.parseDouble(perfs.getString("highValue", "170")) < 25) {
+                        high_line = (short) (tolerantParseDouble(perfs.getString("highValue", "10.0"), 10.0) / Constants.MGDL_TO_MMOLL);
+                    } else {
+                        high_line = (short) tolerantParseInt(perfs.getString("highValue", "170"), 170);
+                    }
+                    short high_limit_val = (short) Pref.getStringToInt("default_ymax", 250);
+                    Log.d(TAG, "High values: " + high_line + " // " + high_limit_val + " // " + perfs.getString("highValue", "170"));
+                    buff = ByteBuffer.allocate(4);
+                    buff.putShort(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) high_line) : (short) high_line);
+                    buff.putShort(2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) high_limit_val) : (short) high_limit_val);
+
+                    dict.addBytes(FRAMEWORK_HIGHLIMIT, buff.array());
+                }
+                if (low_limit) {
+                    short low_line = 0;
+                    if (Double.parseDouble(perfs.getString("lowValue", "70")) < 25) {
+                        low_line = (short) (tolerantParseDouble(perfs.getString("lowValue", "2.2"), 2.2) / Constants.MGDL_TO_MMOLL);
+                    } else {
+                        low_line = (short) tolerantParseInt(perfs.getString("lowValue", "70"), 70);
+                    }
+                    short low_limit_val = (short) Pref.getStringToInt("default_ymin", 40);
+                    Log.d(TAG, "Low values: " + low_line + " // " + low_limit_val);
+
+                    buff = ByteBuffer.allocate(4);
+                    buff.putShort(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) low_line) : (short) low_line);
+                    buff.putShort(2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) low_limit_val) : (short) low_limit_val);
+                    dict.addBytes(FRAMEWORK_LOWLIMIT, buff.array());
+
+                }
+                if (send_phone_battery)
+                    dict.addUint16(FRAMEWORK_PHONEBAT, (byte) getBatteryLevel());
 
                 if (send_delta_value) {
                     short value = 0;
@@ -251,6 +282,45 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                     }
                     Log.d(TAG, "Value: " + Integer.toHexString((int) value));
                     dict.addUint16(FRAMEWORK_BGL_DELTA, value);
+                }
+
+                if (data.contains(FRAMEWORK_BGL_VALUE)) {
+                    long timestamp = data.getUnsignedIntegerAsLong(FRAMEWORK_BGL_VALUE);
+                    String trendPeriodString = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_trend_period", "3");
+                    int trendPeriod = Integer.parseInt(trendPeriodString);
+                    Log.d(TAG, "Trend period: " + trendPeriod + " - " + lastTrendPeriod + " Since: " + timestamp);
+                    List<BgReading> readings;
+                    long end = System.currentTimeMillis() + (60000 * 5);
+                    long start = timestamp == 0 ? end - (60000 * 60 * trendPeriod) - (60000 * 10) : timestamp * 1000 + (60000 * 2);
+                    lastTrendPeriod = trendPeriod;
+                    readings = BgReading.latestForGraph(200, start, end);
+                    Log.d(TAG, "Trend size: " + readings.size());
+                    boolean ismmol = !Pref.getString("units", "mgdl").equals("mgdl");
+                    if (readings.size() > 1) {
+                        // convert to uint16
+                        buff = ByteBuffer.allocate(4 + 2 + readings.size() * 2);
+                        int ts = (int) (readings.get(0).timestamp / 1000);
+                        buff.putInt(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes(ts) : ts);
+                        buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) readings.size()) : (short) readings.size());
+                        for (int i = 0; i < readings.size(); i++) {
+                            short value = (short) Math.round(readings.get(readings.size() - 1 - i).getDg_mgdl());
+                            Log.d(TAG, "Trend data: " + readings.get(readings.size() - 1 - i).getDg_mgdl() + " value: " + value);
+                            if (ismmol) value |= 0x8000;
+                            buff.putShort(6 + i * 2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(value) : value); // convert endianess if need be
+                        }
+                        dict.addBytes(FRAMEWORK_BGL_SERIES, buff.array());
+                        Log.d(TAG, "Sending bgl series");
+                    } else {
+                        short value  = (short) Math.round(readings.get(0).getDg_mgdl());
+                        if (ismmol) value |= 0x8000;
+                        int ts = (int) (readings.get(0).timestamp / 1000);
+                        buff = ByteBuffer.allocate(6);
+                        buff.putInt(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes(ts) : ts);
+                        buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(value) : value);
+                        dict.addBytes(FRAMEWORK_BGL_VALUE, buff.array());
+                        Log.d(TAG, "Sending BGL value");
+                    }
+
                 }
 
                 sendDataToPebble(dict);
