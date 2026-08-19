@@ -3,6 +3,8 @@ package com.eveningoutpost.dexdrip.utilitymodels.pebble;
 import static com.eveningoutpost.dexdrip.models.JoH.tolerantParseDouble;
 import static com.eveningoutpost.dexdrip.models.JoH.tolerantParseInt;
 
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.os.PowerManager;
@@ -31,11 +33,19 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Dictionary;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Bundle;
+
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+
 
 /**
  * Created by THE NIGHTSCOUT PROJECT CONTRIBUTORS (and adapted to fit the needs of this project)
@@ -103,16 +113,35 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
     protected boolean heartBeat = false;
 
+    PebbleFramework() {
+
+    }
+
     @Override
     public void startDeviceCommand() {
         if (JoH.ratelimitmilli("pebble-trend", 250)) {
-        transactionFailed = false;
-        transactionOk = false;
-        sendStep = 5;
-        messageInTransit = false;
-        done = true;
-        sendingData = false;
-        sendData();
+            // intent received, which means new data is available
+            transactionFailed = false;
+            transactionOk = false;
+            sendStep = 5;
+            messageInTransit = false;
+            done = true;
+            sendingData = false;
+
+            // if we have a trend time, check if > 1 min ago and send
+            BgReading reading = BgReading.last();
+            long readingts = reading.timestamp / 1000;
+            Log.d(TAG, "Timestamps: " + readingts + " vs " + last_seen_timestamp);
+            if ((360) > readingts- last_seen_timestamp && readingts- last_seen_timestamp  > (50)) {
+                // send value to watch since we are in the window
+
+                PebbleDictionary dict = new PebbleDictionary();
+                sendBgl(dict, reading);
+                sendDelta(dict);
+                sendDataToPebble(dict);
+            } else {
+                sendData();
+            }
         } else {
             Log.d(TAG, "SendData ratelimited!");
         }
@@ -169,6 +198,45 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         sendData();
     }
 
+    private PebbleDictionary sendDelta(PebbleDictionary dict) {
+        char value = 0;
+        char mask = 0;
+        if (use_best_glucose) {
+            value = (char) dg.delta_mgdl;
+        } else {
+            String deltastring = this.bgGraphBuilder.unitizedDeltaString(false, true);
+            if (deltastring.contains("?")) {
+                mask = 0x20;
+            } else {
+                float bgfloat = Float.parseFloat(deltastring);
+                value = (char) bgfloat;
+            }
+        }
+        if (getBooleanValue("pebble_show_delta_units")) {
+            mask |= 0x40;
+        }
+        if (!Pref.getString("units", "mgdl").equals("mgdl")) {
+            mask |= 0x80;
+        }
+        short result = (short) (mask << 8 | value);
+        Log.d(TAG, "Bgl delta: " + Integer.toHexString((int) result));
+        dict.addUint16(FRAMEWORK_BGL_DELTA, result);
+        return dict;
+    }
+
+    private PebbleDictionary sendBgl(PebbleDictionary dict, BgReading reading) {
+        boolean ismmol = !Pref.getString("units", "mgdl").equals("mgdl");
+        short value  = (short) Math.round(reading.getDg_mgdl());
+        if (ismmol) value |= 0x8000;
+        int ts = (int) (reading.timestamp / 1000);
+        buff = ByteBuffer.allocate(6);
+        buff.putInt(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes(ts) : ts);
+        buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(value) : value);
+        dict.addBytes(FRAMEWORK_BGL_VALUE, buff.array());
+        Log.d(TAG, "Sending BGL value");
+        return dict;
+    }
+
     private void evaluateDataFromPebble(PebbleDictionary data) {
 
         try {
@@ -178,7 +246,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                 // heartbeat message struct
                 long hb = data.getUnsignedIntegerAsLong(FRAMEWORK_HEARTBEAT);
                 Log.d(TAG, "Heartbeat received: " + Long.toHexString(hb));
-                // old fashioned decoding of bitarrays
+                // old fashioned decoding of bitmasks
                 boolean colour = (hb & 0x80000000) != 0;
                 boolean time_series = (hb & 0x40000000) != 0;
                 long time_period = (hb & 0x30000000) >> 28;
@@ -248,40 +316,12 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                     dict.addBytes(FRAMEWORK_LOWLIMIT, buff.array());
 
                 }
-                if (send_phone_battery)
+                if (send_phone_battery) {
                     dict.addUint16(FRAMEWORK_PHONEBAT, (byte) getBatteryLevel());
+                }
 
                 if (send_delta_value) {
-                    short value = 0;
-                    if (use_best_glucose) {
-                        if (dg.delta_mgdl < 0.0) {
-                            value = (short) (-1.0 * dg.delta_mgdl);
-                            value |= 0x4000;
-                        } else {
-                            value = (short) dg.delta_mgdl;
-                        }
-                    } else {
-                        String deltastring = this.bgGraphBuilder.unitizedDeltaString(false, true);
-                        if (deltastring.contains("?")) {
-                            value = 0x3FFF;
-                        } else {
-                            float bgfloat = Float.parseFloat(deltastring);
-                            if (bgfloat < 0.0) {
-                                value = (short) (-1.0 * bgfloat);
-                                value |= 0x2000;
-                            } else {
-                                value = (short) bgfloat;
-                            }
-                        }
-                    }
-                    if (getBooleanValue("pebble_show_delta_units")) {
-                        value |= 0x4000;
-                    }
-                    if (!Pref.getString("units", "mgdl").equals("mgdl")) {
-                        value |= 0x8000;
-                    }
-                    Log.d(TAG, "Value: " + Integer.toHexString((int) value));
-                    dict.addUint16(FRAMEWORK_BGL_DELTA, value);
+                    sendDelta(dict);
                 }
 
                 if (data.contains(FRAMEWORK_BGL_VALUE)) {
@@ -289,13 +329,17 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                     String trendPeriodString = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_trend_period", "3");
                     int trendPeriod = Integer.parseInt(trendPeriodString);
                     Log.d(TAG, "Trend period: " + trendPeriod + " - " + lastTrendPeriod + " Since: " + timestamp);
-                    List<BgReading> readings;
+
                     long end = System.currentTimeMillis() + (60000 * 5);
-                    long start = timestamp == 0 ? end - (60000 * 60 * trendPeriod) - (60000 * 10) : timestamp * 1000 + (60000 * 2);
+                    long start = timestamp == 0 ? end - (60000 * 60 * trendPeriod) - (60000 * 10) : (timestamp * 1000) - (4 * 60000);
                     lastTrendPeriod = trendPeriod;
-                    readings = BgReading.latestForGraph(200, start, end);
+                    List<BgReading> readings = BgReading.latestForGraph(200, start, end);
+                    last_seen_timestamp = readings.get(0).timestamp / 1000;
+
                     Log.d(TAG, "Trend size: " + readings.size());
                     boolean ismmol = !Pref.getString("units", "mgdl").equals("mgdl");
+                    // strip known (timestamp is a known value)
+                    if (readings.get(readings.size()-1).timestamp / 1000 == timestamp) readings.remove(readings.size()-1); // check if oldest is the timestamp
                     if (readings.size() > 1) {
                         // convert to uint16
                         buff = ByteBuffer.allocate(4 + 2 + readings.size() * 2);
@@ -304,21 +348,14 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                         buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) readings.size()) : (short) readings.size());
                         for (int i = 0; i < readings.size(); i++) {
                             short value = (short) Math.round(readings.get(readings.size() - 1 - i).getDg_mgdl());
-                            Log.d(TAG, "Trend data: " + readings.get(readings.size() - 1 - i).getDg_mgdl() + " value: " + value);
+                            Log.d(TAG, "Trend data: " + readings.get(readings.size() - 1 - i).getDg_mgdl() + " value: " + value + " - Time: " + readings.get(readings.size() - 1 - i).timestamp / 1000);
                             if (ismmol) value |= 0x8000;
                             buff.putShort(6 + i * 2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(value) : value); // convert endianess if need be
                         }
                         dict.addBytes(FRAMEWORK_BGL_SERIES, buff.array());
                         Log.d(TAG, "Sending bgl series");
-                    } else {
-                        short value  = (short) Math.round(readings.get(0).getDg_mgdl());
-                        if (ismmol) value |= 0x8000;
-                        int ts = (int) (readings.get(0).timestamp / 1000);
-                        buff = ByteBuffer.allocate(6);
-                        buff.putInt(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes(ts) : ts);
-                        buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(value) : value);
-                        dict.addBytes(FRAMEWORK_BGL_VALUE, buff.array());
-                        Log.d(TAG, "Sending BGL value");
+                    } else if (readings.size() == 1){
+                        sendBgl(dict, readings.get(0));
                     }
 
                 }
