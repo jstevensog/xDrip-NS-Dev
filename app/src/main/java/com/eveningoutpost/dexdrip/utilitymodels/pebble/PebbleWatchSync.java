@@ -130,7 +130,7 @@ public class PebbleWatchSync extends ForegroundService {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-
+        Log.i(TAG, "Start called with intent: " + intent.toString());
         if (getCurrentBroadcastToPebbleSetting() == PebbleDisplayType.None) {
             stopSelf();
             return START_NOT_STICKY;
