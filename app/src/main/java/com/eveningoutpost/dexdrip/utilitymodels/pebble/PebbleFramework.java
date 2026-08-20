@@ -303,7 +303,9 @@ public class PebbleFramework extends PebbleDisplayAbstract {
             } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart()))) {
                 this.dictionary.addString(MESSAGE_KEY, "Wait " + (SensorDays.get().getWarmupMs()/(1000/60/60)) + " min" );
                 //this.dictionary.addString(BG_DELTA_KEY,"Warming Up");
-
+            } else {
+                this.dictionary.addString(MESSAGE_KEY, "");
+            }
         } else {
             Log.v(TAG, "buildDictionary: latest mBgReading is null, so sending default values");
             this.dictionary.addString(ICON_KEY, getSlopeOrdinal());
