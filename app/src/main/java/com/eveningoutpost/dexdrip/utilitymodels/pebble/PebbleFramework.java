@@ -141,6 +141,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                 PebbleDictionary dict = new PebbleDictionary();
                 sendBgl(dict, reading);
                 sendDelta(dict);
+                sendSlope(dict);
                 sendDataToPebble(dict);
             } else {
                 sendData();
@@ -202,17 +203,17 @@ public class PebbleFramework extends PebbleDisplayAbstract {
     }
 
     private PebbleDictionary sendDelta(PebbleDictionary dict) {
-        char value = 0;
-        char mask = 0;
+        byte value = 0;
+        byte mask = 0;
         if (use_best_glucose) {
-            value = (char) dg.delta_mgdl;
+            value = (byte) dg.delta_mgdl;
         } else {
             String deltastring = this.bgGraphBuilder.unitizedDeltaString(false, true);
             if (deltastring.contains("?")) {
                 mask = 0x20;
             } else {
                 float bgfloat = Float.parseFloat(deltastring);
-                value = (char) bgfloat;
+                value = (byte) bgfloat;
             }
         }
         if (getBooleanValue("pebble_show_delta_units")) {
@@ -221,9 +222,11 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         if (!Pref.getString("units", "mgdl").equals("mgdl")) {
             mask |= 0x80;
         }
-        short result = (short) (mask << 8 | value);
-        Log.d(TAG, "Bgl delta: " + Integer.toHexString((int) result));
-        dict.addUint16(FRAMEWORK_BGL_DELTA, result);
+        buff = ByteBuffer.allocate(2);
+        buff.put(0, value); // value is read as uint16, needs endianess conversion
+        buff.put(1, mask);
+        Log.d(TAG, "Bgl delta: mask: " + Integer.toHexString(mask & 0xFF) + " Value: " + Integer.toHexString(value & 0xFF));
+        dict.addBytes(FRAMEWORK_BGL_DELTA, buff.array());
         return dict;
     }
 
@@ -237,6 +240,15 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(value) : value);
         dict.addBytes(FRAMEWORK_BGL_VALUE, buff.array());
         Log.d(TAG, "Sending BGL value");
+        return dict;
+    }
+
+    private PebbleDictionary sendSlope(PebbleDictionary dict) {
+        if (!getBooleanValue("pebble_show_arrows") || no_signal) {
+            dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 0);
+        } else {
+            dict.addUint8(FRAMEWORK_SLOPEVAL, getSlopeOrdinalUint8());
+        }
         return dict;
     }
 
@@ -258,10 +270,11 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                 boolean small_dots = (hb & 0x02000000) != 0;
                 boolean send_iob = (hb & 0x01000000) != 0;
                 boolean send_pump_state = (hb & 0x00800000) != 0;
+                boolean send_phone_battery = (hb & 0x00400000) != 0;
                 boolean send_pump_battery = (hb & 0x00200000) != 0;
                 boolean send_delta_value = (hb & 0x00100000) != 0;
                 boolean send_slope_arrow = (hb & 0x00080000) != 0;
-                boolean send_phone_battery = (hb & 0x00400000) != 0;
+                boolean send_sensor_expiry = (hb & 0x00040000) != 0;
                 Log.d(TAG, "Framework heartbeat: Colour=" + colour
                         + " time_series=" + time_series
                         + " time_period=" + time_period
@@ -280,11 +293,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
 
                 if (send_slope_arrow) {
-                    if (!getBooleanValue("pebble_show_arrows") || no_signal) {
-                        dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 0);
-                    } else {
-                        dict.addUint8(FRAMEWORK_SLOPEVAL, getSlopeOrdinalUint8());
-                    }
+                    sendSlope(dict);
                 }
                 SharedPreferences perfs = PreferenceManager.getDefaultSharedPreferences(context);
                 if (high_limit) {
