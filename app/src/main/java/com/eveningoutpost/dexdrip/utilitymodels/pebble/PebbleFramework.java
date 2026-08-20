@@ -287,19 +287,23 @@ public class PebbleFramework extends PebbleDisplayAbstract {
             }
 
             // TODO I think special message is only appropriate with flat trend
+            // Note:  Message can only be 12 characters
             long TimeLeft = SensorDays.get().getRemainingSensorPeriodInMs();
             if (bgReadingS.equalsIgnoreCase(msg)) {
                 this.dictionary.addString(MESSAGE_KEY, PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_text", "BAZINGA!"));
-            } else if(TimeLeft < (24*60*60*1000)) {
-                int hoursLeft = Math.toIntExact(TimeLeft / 1000 / 60 / 60);
-                int minutesLeft = Math.toIntExact(TimeLeft - (hoursLeft * 60 * 60 * 100) / (1000 / 60));
-                this.dictionary.addString(MESSAGE_KEY, "Expires: " + hoursLeft + ":" + minutesLeft);
+            } else if(TimeLeft < (24*3600000)) {
+                int hoursLeft = Math.toIntExact(TimeLeft / 3600000);
+                int minutesLeft = Math.toIntExact((TimeLeft - (hoursLeft * 3600000)) / 60000);
+                Log.d(TAG,"TimreLrft="+TimeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
+                if(hoursLeft > 0) {
+                    this.dictionary.addString(MESSAGE_KEY, "End: " + hoursLeft + ":" + String.format("%02d", minutesLeft) + "h");
+                } else {
+                    this.dictionary.addString(MESSAGE_KEY, "End: " + minutesLeft + " min");
+                }
             } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart()))) {
                 this.dictionary.addString(MESSAGE_KEY, "Wait " + (SensorDays.get().getWarmupMs()/(1000/60/60)) + " min" );
                 //this.dictionary.addString(BG_DELTA_KEY,"Warming Up");
-            } else {
-                this.dictionary.addString(MESSAGE_KEY, "");
-            }
+
         } else {
             Log.v(TAG, "buildDictionary: latest mBgReading is null, so sending default values");
             this.dictionary.addString(ICON_KEY, getSlopeOrdinal());
