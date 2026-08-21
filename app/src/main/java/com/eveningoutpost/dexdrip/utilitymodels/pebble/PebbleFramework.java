@@ -116,6 +116,13 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
     protected boolean heartBeat = false;
 
+    private boolean use_png = false;
+    private long time_period = 0;
+    private boolean colour = false;
+    private long png_height = 0;
+    private long png_width = 0;
+    private boolean png_highdef = false;
+
     PebbleFramework() {
 
     }
@@ -146,6 +153,10 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                     sendBgl(dict, bgReading);
                     sendDelta(dict);
                     sendSlope(dict);
+
+                    // if we have png enabled, also send png
+                    if (use_png) sendPng(dict, colour, png_highdef, png_width, png_height);
+                    ;
 
                     sendDataToPebble(dict);
                     last_seen_timestamp = readingts;
@@ -271,9 +282,9 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                 long hb = data.getUnsignedIntegerAsLong(FRAMEWORK_HEARTBEAT);
                 Log.d(TAG, "Heartbeat received: " + Long.toHexString(hb));
                 // old fashioned decoding of bitmasks
-                boolean colour = (hb & 0x80000000) != 0;
+                colour = (hb & 0x80000000) != 0;
                 boolean time_series = (hb & 0x40000000) != 0;
-                long time_period = (hb & 0x30000000) >> 28;
+                time_period = (hb & 0x30000000) >> 28;
                 boolean high_limit = (hb & 0x08000000) != 0;
                 boolean low_limit = (hb & 0x04000000) != 0;
                 boolean small_dots = (hb & 0x02000000) != 0;
@@ -346,6 +357,8 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                     sendDelta(dict);
                 }
 
+                use_png = !time_series;
+
                 if (data.contains(FRAMEWORK_BGL_VALUE)) {
                     long timestamp = data.getUnsignedIntegerAsLong(FRAMEWORK_BGL_VALUE);
                     String trendPeriodString = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_trend_period", "3");
@@ -362,7 +375,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                     boolean ismmol = !Pref.getString("units", "mgdl").equals("mgdl");
                     // strip known (timestamp is a known value)
                     if (readings.get(readings.size()-1).timestamp / 1000 == timestamp) readings.remove(readings.size()-1); // check if oldest is the timestamp
-                    if (readings.size() > 1) {
+                    if (readings.size() > 1 && time_series) {
                         // convert to uint16
                         buff = ByteBuffer.allocate(4 + 2 + readings.size() * 2);
                         int ts = (int) (readings.get(0).timestamp / 1000);
@@ -376,10 +389,19 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                         }
                         dict.addBytes(FRAMEWORK_BGL_SERIES, buff.array());
                         Log.d(TAG, "Sending bgl series");
-                    } else if (readings.size() == 1){
+                    } else if (readings.size() == 1 || !time_series){
                         sendBgl(dict, readings.get(0));
                     }
 
+                }
+
+                if (!time_series && data.contains(FRAMEWORK_PNG_IMAGE)) {
+                    // we use png method
+                    long png_size = data.getUnsignedIntegerAsLong(FRAMEWORK_PNG_IMAGE);
+                    png_highdef = (png_size & 0x80000000) != 0;
+                    png_width = png_size & 0x000003FFF;
+                    png_height = (png_size & 0x0FFFC000) >> 14;
+                    sendPng(dict, colour, png_highdef, png_width, png_height);
                 }
 
                 sendDataToPebble(dict);
@@ -410,7 +432,56 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
     }
 
+    private PebbleDictionary sendPng(PebbleDictionary dict, boolean colour, boolean high_bit, long width, long height) {
+        if (width == 0 || height == 0) return dict;
+        int png_depth = 16;
+        boolean highLine = getBooleanValue("pebble_high_line");
+        boolean lowLine = getBooleanValue("pebble_low_line");
 
+        String trendPeriodString = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_trend_period", "3");
+        Integer trendPeriod = Integer.parseInt(trendPeriodString);
+
+        if ((trendPeriod != lastTrendPeriod) || (JoH.ratelimit("pebble-bggraphbuilder",60)))
+        {
+            long end = System.currentTimeMillis() + (60000 * 5);
+            long start = end - (60000 * 60 * trendPeriod) - (60000 * 10);
+            this.bgGraphBuilder = new BgGraphBuilder(context, start, end, MAX_VALUES, true);
+            lastTrendPeriod = trendPeriod;
+        }
+
+
+        Log.d(TAG, "sendTrendToPebble: highLine is " + highLine + ", lowLine is " + lowLine + ",trendPeriod is " + trendPeriod);
+        Log.d(TAG, "Size: " + width + " x " + height);
+        Bitmap bgTrend = new BgSparklineBuilder(this.context)
+                .setBgGraphBuilder(this.bgGraphBuilder)
+                .setStart(System.currentTimeMillis() - 60000 * 60 * trendPeriod)
+                .setEnd(System.currentTimeMillis())
+                //.setHeightPx(PebbleUtil.pebbleDisplayType == PebbleDisplayType.TrendClassic ? 63 : 84) // 84
+                .setHeightPx((int) height)
+                //.setWidthPx(PebbleUtil.pebbleDisplayType == PebbleDisplayType.TrendClassic ? 84 : 144) // 144
+                .noLowLineFill(true)
+                .setWidthPx((int)
+                        width)
+                .showHighLine(highLine)
+                .showLowLine(lowLine)
+                .setTinyDots(Pref.getBoolean("pebble_tiny_dots", false))
+                .setSmallDots(!Pref.getBoolean("pebble_tiny_dots", false))
+                .build();
+
+        //encode the trend bitmap as a PNG
+        if(high_bit && colour) {
+            Log.d(TAG,"sendTrendToPebble: Pebble requested PNG8 depth");
+            png_depth = 64;
+        }
+        final byte[] img = SimpleImageEncoder.encodeBitmapAsPNG(bgTrend, colour, !colour ? 2: png_depth, true);
+
+        image_size = img.length;
+        buff = ByteBuffer.wrap(img);
+        bgTrend.recycle();
+        Log.d(TAG, "Sending PNG: " + buff.array().length);
+        dict.addBytes(FRAMEWORK_PNG_IMAGE, buff.array());
+        return dict;
+    }
 
     private String lastBfReadingSent;
 
