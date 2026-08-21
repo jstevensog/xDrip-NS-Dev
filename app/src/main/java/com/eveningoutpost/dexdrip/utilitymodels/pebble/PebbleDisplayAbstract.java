@@ -81,7 +81,7 @@ public abstract class PebbleDisplayAbstract implements PebbleDisplayInterface {
     protected PebbleWatchSync pebbleWatchSync;
 
     protected static final boolean use_best_glucose = true;
-    protected BestGlucose.DisplayGlucose dg;
+    protected BestGlucose.DisplayGlucose dg = BestGlucose.getDisplayGlucose();
 
     protected long last_seen_timestamp = 0;
 
@@ -185,8 +185,9 @@ public abstract class PebbleDisplayAbstract implements PebbleDisplayInterface {
     }
 
     public byte getSlopeOrdinalUint8() {
-        if ((use_best_glucose && dg == null) || (!use_best_glucose && this.bgReading == null))
+        if ((use_best_glucose && dg == null) || (!use_best_glucose && this.bgReading == null)) {
             return 0;
+        }
 
         final String arrow_name = (use_best_glucose ? dg.delta_name : this.bgReading.slopeName());
         if (arrow_name.equalsIgnoreCase("DoubleDown"))

@@ -131,18 +131,27 @@ public class PebbleFramework extends PebbleDisplayAbstract {
             done = true;
             sendingData = false;
 
-            // if we have a trend time, check if > 1 min ago and send
-            BgReading reading = BgReading.last();
-            long readingts = reading.timestamp / 1000;
-            Log.d(TAG, "Timestamps: " + readingts + " vs " + last_seen_timestamp);
-            if ((360) > readingts- last_seen_timestamp && readingts- last_seen_timestamp  > (50)) {
-                // send value to watch since we are in the window
+            // we likely have a new reading, use it
+            dg = BestGlucose.getDisplayGlucose();
+            bgReading = BgReading.last();
+            if (bgReading != null) {
+                long readingts = bgReading.timestamp / 1000;
 
-                PebbleDictionary dict = new PebbleDictionary();
-                sendBgl(dict, reading);
-                sendDelta(dict);
-                sendSlope(dict);
-                sendDataToPebble(dict);
+                Log.d(TAG, "Timestamps: " + readingts + " vs " + last_seen_timestamp + " = " + (readingts - last_seen_timestamp ));
+                Log.d(TAG, "DG: " + dg.timestamp + " val: " + dg.mgdl + " // " + " reading: " + bgReading.timestamp + " val: " + bgReading.getDg_mgdl());
+                if (readingts - last_seen_timestamp > (30)) { // the watch will figure out if it needs more
+                    // send value to watch since we are in the window
+
+                    PebbleDictionary dict = new PebbleDictionary();
+                    sendBgl(dict, bgReading);
+                    sendDelta(dict);
+                    sendSlope(dict);
+
+                    sendDataToPebble(dict);
+                    last_seen_timestamp = readingts;
+                } else if (readingts != last_seen_timestamp || last_seen_timestamp == 0){
+                    sendData();
+                }
             } else {
                 sendData();
             }
@@ -205,8 +214,8 @@ public class PebbleFramework extends PebbleDisplayAbstract {
     private PebbleDictionary sendDelta(PebbleDictionary dict) {
         byte value = 0;
         byte mask = 0;
-        if (use_best_glucose) {
-            value = (byte) dg.delta_mgdl;
+        if (use_best_glucose && BestGlucose.getDisplayGlucose() != null) {
+            value = (byte) BestGlucose.getDisplayGlucose().delta_mgdl;
         } else {
             String deltastring = this.bgGraphBuilder.unitizedDeltaString(false, true);
             if (deltastring.contains("?")) {
@@ -295,6 +304,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                 if (send_slope_arrow) {
                     sendSlope(dict);
                 }
+
                 SharedPreferences perfs = PreferenceManager.getDefaultSharedPreferences(context);
                 if (high_limit) {
                     short high_line = 0;
