@@ -294,15 +294,15 @@ public class PebbleFramework extends PebbleDisplayAbstract {
             } else if(TimeLeft < (24*3600000)) {
                 int hoursLeft = Math.toIntExact(TimeLeft / 3600000);
                 int minutesLeft = Math.toIntExact((TimeLeft - (hoursLeft * 3600000)) / 60000);
-                Log.d(TAG,"TimreLrft="+TimeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
+                //Log.d(TAG,"TimeLeft="+TimeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
                 if(hoursLeft > 0) {
                     this.dictionary.addString(MESSAGE_KEY, "End: " + hoursLeft + ":" + String.format("%02d", minutesLeft) + "h");
                 } else {
                     this.dictionary.addString(MESSAGE_KEY, "End: " + minutesLeft + " min");
                 }
             } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart()))) {
-                this.dictionary.addString(MESSAGE_KEY, "Wait " + (SensorDays.get().getWarmupMs()/(1000/60/60)) + " min" );
-                //this.dictionary.addString(BG_DELTA_KEY,"Warming Up");
+                this.dictionary.addString(MESSAGE_KEY, "Wait " + Math.toIntExact((SensorDays.get().getWarmupMs() /3600000)) + " min" );
+                this.dictionary.addString(BG_DELTA_KEY,"Warming Up");
             } else {
                 this.dictionary.addString(MESSAGE_KEY, "");
             }
