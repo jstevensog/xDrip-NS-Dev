@@ -13,15 +13,18 @@ import android.preference.PreferenceManager;
 import com.eveningoutpost.dexdrip.BestGlucose;
 import com.eveningoutpost.dexdrip.Home;
 import com.eveningoutpost.dexdrip.cgm.medtrum.SensorState;
+import com.eveningoutpost.dexdrip.g5model.DexSessionKeeper;
 import com.eveningoutpost.dexdrip.models.ActiveBgAlert;
 import com.eveningoutpost.dexdrip.models.BgReading;
 import com.eveningoutpost.dexdrip.models.JoH;
+import com.eveningoutpost.dexdrip.models.Sensor;
 import com.eveningoutpost.dexdrip.models.UserError.Log;
 import com.eveningoutpost.dexdrip.services.Ob1G5CollectionService;
 import com.eveningoutpost.dexdrip.utilitymodels.BgGraphBuilder;
 import com.eveningoutpost.dexdrip.utilitymodels.BgSparklineBuilder;
 import com.eveningoutpost.dexdrip.utilitymodels.Constants;
 import com.eveningoutpost.dexdrip.utilitymodels.Pref;
+import com.eveningoutpost.dexdrip.utilitymodels.SensorStatus;
 import com.eveningoutpost.dexdrip.utilitymodels.SimpleImageEncoder;
 import com.eveningoutpost.dexdrip.g5model.SensorDays;
 import com.getpebble.android.kit.PebbleKit;
@@ -122,6 +125,8 @@ public class PebbleFramework extends PebbleDisplayAbstract {
     private long png_height = 0;
     private long png_width = 0;
     private boolean png_highdef = false;
+    private short high_line_store = 0;
+    private short low_line_store = 0;
 
     PebbleFramework() {
 
@@ -141,8 +146,10 @@ public class PebbleFramework extends PebbleDisplayAbstract {
             // we likely have a new reading, use it
             dg = BestGlucose.getDisplayGlucose();
             bgReading = BgReading.last();
-            if (bgReading != null) {
-                long readingts = bgReading.timestamp / 1000;
+
+            BgReading reading = bgReading;
+            if (reading != null) {
+                long readingts = reading.timestamp / 1000;
 
                 Log.d(TAG, "Timestamps: " + readingts + " vs " + last_seen_timestamp + " = " + (readingts - last_seen_timestamp ));
                 Log.d(TAG, "DG: " + dg.timestamp + " val: " + dg.mgdl + " // " + " reading: " + bgReading.timestamp + " val: " + bgReading.getDg_mgdl());
@@ -150,21 +157,23 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                     // send value to watch since we are in the window
 
                     PebbleDictionary dict = new PebbleDictionary();
-                    sendBgl(dict, bgReading);
-                    sendDelta(dict);
-                    sendSlope(dict);
 
+                    // bgl error reporting is done by sendBgl
+
+                    sendBgl(dict, reading);
+                    sendDelta(dict);
+                    sendSlope(dict, reading);
+                    sendVibe(dict);
+
+                    sendHighLimit(dict, false);
+                    sendLowLimit(dict, false);
+                    sendMessage(dict);
                     // if we have png enabled, also send png
                     if (use_png) sendPng(dict, colour, png_highdef, png_width, png_height);
-                    ;
 
                     sendDataToPebble(dict);
                     last_seen_timestamp = readingts;
-                } else if (readingts != last_seen_timestamp || last_seen_timestamp == 0){
-                    sendData();
                 }
-            } else {
-                sendData();
             }
         } else {
             Log.d(TAG, "SendData ratelimited!");
@@ -222,6 +231,44 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         sendData();
     }
 
+    private PebbleDictionary sendMessage(PebbleDictionary dict) {
+        long TimeLeft = SensorDays.get().getRemainingSensorPeriodInMs();
+        if (getBgReading().equalsIgnoreCase(PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_value", ""))) {
+            this.dictionary.addString(MESSAGE_KEY, PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_text", "BAZINGA!"));
+        } else if(TimeLeft < (24*3600000)) { // less than a day left
+            int hoursLeft = Math.toIntExact(TimeLeft / 3600000);
+            int minutesLeft = Math.toIntExact((TimeLeft - (hoursLeft * 3600000)) / 60000);
+            Log.d(TAG,"TimreLrft="+TimeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
+            if(hoursLeft > 0) {
+                this.dictionary.addString(MESSAGE_KEY, "End: " + hoursLeft + ":" + String.format("%02d", minutesLeft) + "h");
+            } else {
+                this.dictionary.addString(MESSAGE_KEY, "End: " + minutesLeft + " min");
+            }
+        } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart()))) {
+            this.dictionary.addString(MESSAGE_KEY, "Wait " + ((int) (SensorDays.get().getWarmupMs()/(60000))) + " min" );
+            //this.dictionary.addString(BG_DELTA_KEY,"Warming Up");
+        }
+        return dict;
+    }
+
+    private PebbleDictionary sendSensorRemaining(PebbleDictionary dict) {
+        long TimeLeft = (long) (SensorDays.get().getRemainingSensorPeriodInMs() / 1000.0);
+        dict.addUint32(FRAMEWORK_SENSOR_TIME_LEFT, (int) TimeLeft);
+        return dict;
+    }
+    private PebbleDictionary sendVibe(PebbleDictionary dict) {
+        no_signal = ((new Date().getTime()) - Home.stale_data_millis() - this.bgReading.timestamp > 0);
+
+        if (no_signal) {
+            dict.addInt8(FRAMEWORK_VIBE, (byte) (getBooleanValue("pebble_vibrate_no_signal") ? 0x01 : 0x00));
+        } else {
+            // vibrate on alert
+            if (getBooleanValue("pebble_vibe_alerts", false) && ActiveBgAlert.currentlyAlerting()) {
+                dict.addInt8(FRAMEWORK_VIBE, (byte) 0x03);
+            }
+        }
+        return dict;
+    }
     private PebbleDictionary sendDelta(PebbleDictionary dict) {
         byte value = 0;
         byte mask = 0;
@@ -241,6 +288,9 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         }
         if (!Pref.getString("units", "mgdl").equals("mgdl")) {
             mask |= 0x80;
+        }
+        if (!getBooleanValue("pebble_show_delta")) {
+            mask |= 0x10; // hide the delta information
         }
         buff = ByteBuffer.allocate(2);
         buff.put(0, value); // value is read as uint16, needs endianess conversion
@@ -263,11 +313,104 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         return dict;
     }
 
-    private PebbleDictionary sendSlope(PebbleDictionary dict) {
-        if (!getBooleanValue("pebble_show_arrows") || no_signal) {
+    final private int SPECIAL_VALUE_NONE = 0;
+    final private int SPECIAL_VALUE_SENSOR_NOT_ACTIVE= 1;
+    final private int SPECIAL_VALUE_MINIMALLY_EGV_AB = 2;
+    final private int SPECIAL_VALUE_NP_ANTENNA = 3;
+    final private int SPECIAL_VALUE_SENSOR_OUT_OF_CALIBRATION = 5;
+    final private int SPECIAL_VALUE_DEVICE_ENDED = 6;
+
+    final private int SPECIAL_VALUE_ABSOLUTE_AB = 9;
+    final private int SPECIAL_VALUE_POWER_AB = 10;
+
+    final private int SPECIAL_VALUE_NO_RF = 12;
+
+
+    private PebbleDictionary sendSlope(PebbleDictionary dict, BgReading reading) {
+        // Check for special cases in order of importance, if none detected show slope if requested by use
+        Sensor sensor = Sensor.currentSensor();
+        no_signal = ((new Date().getTime()) - Home.stale_data_millis() - this.bgReading.timestamp > 0);
+        if (    sensor == null || Sensor.stoppedRecently() ||
+                (int) reading.calculated_value == SPECIAL_VALUE_DEVICE_ENDED ||
+                (int) reading.calculated_value == SPECIAL_VALUE_MINIMALLY_EGV_AB ||
+                (int) reading.calculated_value == SPECIAL_VALUE_SENSOR_NOT_ACTIVE
+                ) { // traffic light
+            dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 12);
+        } else if ( no_signal ||
+                (int) reading.calculated_value == SPECIAL_VALUE_NO_RF ||
+                (int) reading.calculated_value == SPECIAL_VALUE_NP_ANTENNA
+                ) { // broken antenna
+            dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 10);
+        } else if (  (reading.calibration != null && !reading.calibration.isValid()) ||
+                        (int) reading.calculated_value == SPECIAL_VALUE_SENSOR_OUT_OF_CALIBRATION
+                ) { // blood drop
+            dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 11);
+        } else if ((int) reading.calculated_value == SPECIAL_VALUE_ABSOLUTE_AB || (int) reading.calculated_value == SPECIAL_VALUE_POWER_AB) { // question marks
+            dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 14);
+        } else if (sensor.started_at + DexSessionKeeper.getWarmupPeriod() > JoH.ts()) { // hourglass
+            // this should represent the warmup period of the sensor
+            dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 13);
+        } else if (!getBooleanValue("pebble_show_arrows")) {
             dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 0);
         } else {
             dict.addUint8(FRAMEWORK_SLOPEVAL, getSlopeOrdinalUint8());
+        }
+        return dict;
+    }
+
+    private PebbleDictionary sendHighLimit(PebbleDictionary dict, boolean force) {
+        boolean highLine = getBooleanValue("pebble_high_line");
+        SharedPreferences perfs = PreferenceManager.getDefaultSharedPreferences(context);
+        short high_line = 0;
+        // the hig/low line values are set as strings and can thus be in mmol/l
+        if (!highLine) {
+            high_line = 0;
+        } else if (Double.parseDouble(perfs.getString("highValue", "170")) < 25) {
+            high_line = (short) (tolerantParseDouble(perfs.getString("highValue", "10.0"), 10.0) / Constants.MGDL_TO_MMOLL);
+        } else {
+            high_line = (short) tolerantParseInt(perfs.getString("highValue", "170"), 170);
+        }
+        short high_limit_val = (short) Pref.getStringToInt("default_ymax", 250);
+        buff = ByteBuffer.allocate(4);
+        buff.putShort(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) high_line) : (short) high_line);
+        buff.putShort(2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) high_limit_val) : (short) high_limit_val);
+        if ((!highLine && high_line_store != 0) || (highLine && high_line_store == 0) || high_line != high_line_store || force) {
+            Log.d(TAG, "High values: " + high_line + " // " + high_limit_val + " // " + perfs.getString("highValue", "170"));
+            high_line_store = high_limit_val;
+            dict.addBytes(FRAMEWORK_HIGHLIMIT, buff.array());
+        }
+        return dict;
+    }
+
+    private PebbleDictionary sendLowLimit(PebbleDictionary dict, boolean force) {
+        boolean lowLine = getBooleanValue("pebble_low_line");
+        SharedPreferences perfs = PreferenceManager.getDefaultSharedPreferences(context);
+        short low_line = 0;
+        if (!lowLine) {
+            low_line = 0;
+        } else if (Double.parseDouble(perfs.getString("lowValue", "70")) < 25) {
+            low_line = (short) (tolerantParseDouble(perfs.getString("lowValue", "2.2"), 2.2) / Constants.MGDL_TO_MMOLL);
+        } else {
+            low_line = (short) tolerantParseInt(perfs.getString("lowValue", "70"), 70);
+        }
+        short low_limit_val = (short) Pref.getStringToInt("default_ymin", 40);
+
+        buff = ByteBuffer.allocate(4);
+        buff.putShort(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) low_line) : (short) low_line);
+        buff.putShort(2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) low_limit_val) : (short) low_limit_val);
+
+        if ((!lowLine && high_line_store != 0) || (lowLine && high_line_store == 0) || low_line != high_line_store || force) {
+            Log.d(TAG, "Low values: " + low_line + " // " + low_limit_val);
+            low_line_store = low_limit_val;
+            dict.addBytes(FRAMEWORK_LOWLIMIT, buff.array());
+        }
+        return dict;
+    }
+
+    private PebbleDictionary sendBwp(PebbleDictionary dict) {
+        if (((keyStore.getS("bwp_last_insulin") != null) && (JoH.msSince(keyStore.getL("bwp_last_insulin_timestamp")) < Constants.MINUTE_IN_MS * 11))
+                && getBooleanValue("pebble_show_bwp")) {
+            dict.addString(BG_DELTA_KEY, PEBBLE_BWP_SYMBOL + keyStore.getS("bwp_last_insulin")); // 😐
         }
         return dict;
     }
@@ -307,55 +450,22 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                         + " send_delta_value=" + send_delta_value
                         + " send_slope_arrow=" + send_slope_arrow
                         + " send_phone_battery=" + send_phone_battery
+                        + " send_sensor_expiry=" + send_sensor_expiry
                 );
 
                 PebbleDictionary dict = new PebbleDictionary();
 
+                if (send_sensor_expiry) sendSensorRemaining((dict));
 
-                if (send_slope_arrow) {
-                    sendSlope(dict);
-                }
+                if (send_slope_arrow) sendSlope(dict, bgReading);
 
-                SharedPreferences perfs = PreferenceManager.getDefaultSharedPreferences(context);
-                if (high_limit) {
-                    short high_line = 0;
-                    // the hig/low line values are set as strings and can thus be in mmol/l
-                    if (Double.parseDouble(perfs.getString("highValue", "170")) < 25) {
-                        high_line = (short) (tolerantParseDouble(perfs.getString("highValue", "10.0"), 10.0) / Constants.MGDL_TO_MMOLL);
-                    } else {
-                        high_line = (short) tolerantParseInt(perfs.getString("highValue", "170"), 170);
-                    }
-                    short high_limit_val = (short) Pref.getStringToInt("default_ymax", 250);
-                    Log.d(TAG, "High values: " + high_line + " // " + high_limit_val + " // " + perfs.getString("highValue", "170"));
-                    buff = ByteBuffer.allocate(4);
-                    buff.putShort(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) high_line) : (short) high_line);
-                    buff.putShort(2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) high_limit_val) : (short) high_limit_val);
+                if (high_limit) sendHighLimit(dict, true);
 
-                    dict.addBytes(FRAMEWORK_HIGHLIMIT, buff.array());
-                }
-                if (low_limit) {
-                    short low_line = 0;
-                    if (Double.parseDouble(perfs.getString("lowValue", "70")) < 25) {
-                        low_line = (short) (tolerantParseDouble(perfs.getString("lowValue", "2.2"), 2.2) / Constants.MGDL_TO_MMOLL);
-                    } else {
-                        low_line = (short) tolerantParseInt(perfs.getString("lowValue", "70"), 70);
-                    }
-                    short low_limit_val = (short) Pref.getStringToInt("default_ymin", 40);
-                    Log.d(TAG, "Low values: " + low_line + " // " + low_limit_val);
+                if (low_limit) sendLowLimit(dict, true);
 
-                    buff = ByteBuffer.allocate(4);
-                    buff.putShort(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) low_line) : (short) low_line);
-                    buff.putShort(2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) low_limit_val) : (short) low_limit_val);
-                    dict.addBytes(FRAMEWORK_LOWLIMIT, buff.array());
+                if (send_phone_battery)  dict.addUint16(FRAMEWORK_PHONEBAT, (byte) getBatteryLevel());
 
-                }
-                if (send_phone_battery) {
-                    dict.addUint16(FRAMEWORK_PHONEBAT, (byte) getBatteryLevel());
-                }
-
-                if (send_delta_value) {
-                    sendDelta(dict);
-                }
+                if (send_delta_value) sendDelta(dict);
 
                 use_png = !time_series;
 
@@ -405,23 +515,6 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                 }
 
                 sendDataToPebble(dict);
-
-            } else if (data.size() > 0) {
-                pebble_sync_value = data.getUnsignedIntegerAsLong(SYNC_KEY);
-                pebble_platform = data.getUnsignedIntegerAsLong(PLATFORM_KEY);
-                pebble_app_version = data.getString(VERSION_KEY);
-                pebble_trend_size = data.getUnsignedIntegerAsLong(TREND_SIZE);
-                Log.d(TAG, "receiveData: pebble_sync_value=" + pebble_sync_value + ", pebble_platform=" + pebble_platform + ", pebble_app_version=" + pebble_app_version + ", pebble_trend_size=" +pebble_trend_size);
-
-                switch ((int) pebble_platform) {
-                    case 0:
-                        if (PebbleUtil.pebbleDisplayType != PebbleDisplayType.TrendClassic) {
-                            PebbleUtil.pebbleDisplayType = PebbleDisplayType.TrendClassic;
-                            //JoH.static_toast_short("Switching to Pebble Classic Trend");
-                            Log.d(TAG, "Changing to Classic Trend due to platform id");
-                        }
-                        break;
-                }
 
             } else {
                 Log.d(TAG, "receiveData: pebble_app_version not known");

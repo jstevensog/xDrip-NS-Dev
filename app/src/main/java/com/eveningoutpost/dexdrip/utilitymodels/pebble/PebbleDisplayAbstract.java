@@ -74,6 +74,9 @@ public abstract class PebbleDisplayAbstract implements PebbleDisplayInterface {
 
     protected static final int FRAMEWORK_PNG_IMAGE = 2010;
 
+    protected static final int FRAMEWORK_BWP_VALUE = 2011;
+    protected static final int FRAMEWORK_SENSOR_TIME_LEFT = 2012;
+
 
     protected static final int MAX_VALUES =60*24;
 
