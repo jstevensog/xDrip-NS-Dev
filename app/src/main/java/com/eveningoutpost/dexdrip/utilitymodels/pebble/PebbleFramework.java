@@ -225,7 +225,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart())) && !Ob1G5CollectionService.isCollecting()) {
             double timeleft = (SensorDays.get().getWarmupMs() - JoH.msSince(SensorDays.get().getStart())) / 60000.0;
             message = String.format("Wait %.1fm",  timeleft >= 0.0 ? timeleft : 0.0);
-       } else {
+        } else {
             message = "";
         }
         if (message != null) {
