@@ -242,11 +242,15 @@ public class PebbleFramework extends PebbleDisplayAbstract {
             Log.d(TAG,"TimreLrft="+TimeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
             if(hoursLeft > 0) {
                 message = "End: " + hoursLeft + ":" + String.format("%02d", minutesLeft) + "h";
-            } else {
+            } else if (minutesLeft > 0) {
                 message = "End: " + minutesLeft + " min";
+            } else {
+                message = "Sensor exp.";
             }
-        } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart()))) {
-            message = "Wait " + ((int) (SensorDays.get().getWarmupMs()/(60000))) + " min";
+        } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart())) && !Ob1G5CollectionService.isCollecting()) {
+            double timeleft = (SensorDays.get().getWarmupMs() - JoH.msSince(SensorDays.get().getStart())) / 60000.0;
+            message = String.format("Wait %.1fm",  timeleft >= 0.0 ? timeleft : 0.0);
+            //message = "Wait " + ((int) (SensorDays.get().getWarmupMs()/(60000))) + " min";
             //this.dictionary.addString(BG_DELTA_KEY,"Warming Up");
         }
         if (message != null) dict.addString(MESSAGE_KEY, message);
@@ -277,12 +281,21 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         if (use_best_glucose && BestGlucose.getDisplayGlucose() != null) {
             value = (byte) BestGlucose.getDisplayGlucose().delta_mgdl;
         } else {
-            String deltastring = this.bgGraphBuilder.unitizedDeltaString(false, true);
-            if (deltastring.contains("?")) {
-                mask = 0x20;
-            } else {
-                float bgfloat = Float.parseFloat(deltastring);
-                value = (byte) bgfloat;
+            try {
+                String deltastring = this.bgGraphBuilder.unitizedDeltaString(false, true);
+                if (deltastring.contains("?")) {
+                    mask = 0x20;
+                } else {
+                    float bgfloat = Float.parseFloat(deltastring);
+                    value = (byte) bgfloat;
+                }
+            } catch (Exception e) {
+                if (!SensorDays.get().isValid()) {
+                    mask |= 0x08; // unknown state
+                    value = 0;
+                } else {
+                    mask |= 0x10; // hide in warmup
+                }
             }
         }
         if (getBooleanValue("pebble_show_delta_units")) {
@@ -331,25 +344,28 @@ public class PebbleFramework extends PebbleDisplayAbstract {
     private PebbleDictionary sendSlope(PebbleDictionary dict, BgReading reading) {
         // Check for special cases in order of importance, if none detected show slope if requested by use
         Sensor sensor = Sensor.currentSensor();
-        no_signal = ((new Date().getTime()) - Home.stale_data_millis() - this.bgReading.timestamp > 0);
-        if (    sensor == null || Sensor.stoppedRecently() ||
+        Log.d(TAG, "sensor: " + sensor + " reading: " + reading + " signal: " + no_signal);
+
+        if (reading != null) no_signal = ((new Date().getTime()) - Home.stale_data_millis() - this.bgReading.timestamp > 0);
+        else no_signal = true; // no readings possible
+        if ( (sensor == null && !(Ob1G5CollectionService.isG5WarmingUp() || Ob1G5CollectionService.isPendingStart())) || (reading != null && (
                 (int) reading.calculated_value == SPECIAL_VALUE_DEVICE_ENDED ||
                 (int) reading.calculated_value == SPECIAL_VALUE_MINIMALLY_EGV_AB ||
-                (int) reading.calculated_value == SPECIAL_VALUE_SENSOR_NOT_ACTIVE
+                (int) reading.calculated_value == SPECIAL_VALUE_SENSOR_NOT_ACTIVE))
                 ) { // traffic light
             dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 12);
-        } else if ( no_signal ||
+        } else if ( (no_signal && !(Ob1G5CollectionService.isG5WarmingUp() || Ob1G5CollectionService.isPendingStart())) || (reading != null && (
                 (int) reading.calculated_value == SPECIAL_VALUE_NO_RF ||
-                (int) reading.calculated_value == SPECIAL_VALUE_NP_ANTENNA
+                (int) reading.calculated_value == SPECIAL_VALUE_NP_ANTENNA))
                 ) { // broken antenna
             dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 10);
-        } else if (  (reading.calibration != null && !reading.calibration.isValid()) ||
-                        (int) reading.calculated_value == SPECIAL_VALUE_SENSOR_OUT_OF_CALIBRATION
+        } else if (  (reading != null && reading.calibration != null && !reading.calibration.isValid()) ||
+                (reading != null && (int) reading.calculated_value == SPECIAL_VALUE_SENSOR_OUT_OF_CALIBRATION)
                 ) { // blood drop
             dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 11);
-        } else if ((int) reading.calculated_value == SPECIAL_VALUE_ABSOLUTE_AB || (int) reading.calculated_value == SPECIAL_VALUE_POWER_AB) { // question marks
+        } else if (reading != null && ((int) reading.calculated_value == SPECIAL_VALUE_ABSOLUTE_AB || (int) reading.calculated_value == SPECIAL_VALUE_POWER_AB)) { // question marks
             dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 14);
-        } else if (sensor.started_at + DexSessionKeeper.getWarmupPeriod() > JoH.ts()) { // hourglass
+        } else if (Ob1G5CollectionService.isG5WarmingUp() || Ob1G5CollectionService.isPendingStart()) { // hourglass
             // this should represent the warmup period of the sensor
             dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 13);
         } else if (!getBooleanValue("pebble_show_arrows")) {
@@ -378,7 +394,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         buff.putShort(2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) high_limit_val) : (short) high_limit_val);
         if ((!highLine && high_line_store != 0) || (highLine && high_line_store == 0) || high_line != high_line_store || force) {
             Log.d(TAG, "High values: " + high_line + " // " + high_limit_val + " // " + perfs.getString("highValue", "170"));
-            high_line_store = high_limit_val;
+            high_line_store = high_line;
             dict.addBytes(FRAMEWORK_HIGHLIMIT, buff.array());
         }
         return dict;
@@ -401,9 +417,9 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         buff.putShort(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) low_line) : (short) low_line);
         buff.putShort(2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) low_limit_val) : (short) low_limit_val);
 
-        if ((!lowLine && high_line_store != 0) || (lowLine && high_line_store == 0) || low_line != high_line_store || force) {
+        if ((!lowLine && low_line_store != 0) || (lowLine && low_line_store == 0) || low_line != low_line_store || force) {
             Log.d(TAG, "Low values: " + low_line + " // " + low_limit_val);
-            low_line_store = low_limit_val;
+            low_line_store = low_line;
             dict.addBytes(FRAMEWORK_LOWLIMIT, buff.array());
         }
         return dict;
@@ -515,6 +531,8 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                     png_height = (png_size & 0x0FFFC000) >> 14;
                     sendPng(dict, colour, png_highdef, png_width, png_height);
                 }
+
+                sendMessage(dict);
 
                 sendDataToPebble(dict);
 
@@ -678,7 +696,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                 //Log.d(TAG,"TimeLeft="+TimeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
                 if(hoursLeft > 0) {
                     this.dictionary.addString(MESSAGE_KEY, "End: " + hoursLeft + ":" + String.format("%02d", minutesLeft) + "h");
-                } else {
+                } else if (minutesLeft > 0) {
                     this.dictionary.addString(MESSAGE_KEY, "End: " + minutesLeft + " min");
                 }
             } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart()))) {
