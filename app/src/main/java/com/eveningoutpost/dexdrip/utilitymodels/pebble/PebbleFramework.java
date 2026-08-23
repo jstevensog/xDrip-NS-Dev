@@ -37,6 +37,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Dictionary;
@@ -252,8 +253,16 @@ public class PebbleFramework extends PebbleDisplayAbstract {
             message = String.format("Wait %.1fm",  timeleft >= 0.0 ? timeleft : 0.0);
             //message = "Wait " + ((int) (SensorDays.get().getWarmupMs()/(60000))) + " min";
             //this.dictionary.addString(BG_DELTA_KEY,"Warming Up");
+        } else {
+            message = "";
         }
-        if (message != null) dict.addString(MESSAGE_KEY, message);
+        if (message != null) {
+            buff = ByteBuffer.allocate(message.length() + 2);
+            buff.put(0, (byte) (message.length() + 1));
+            if (message.length() > 0) buff.put(message.getBytes(StandardCharsets.UTF_8), 1, message.getBytes(StandardCharsets.UTF_8).length);
+            buff.put(1 + message.length(), (byte)0);
+            dict.addBytes(FRAMEWORK_MESSAGE, buff.array());
+        }
         return dict;
     }
 
