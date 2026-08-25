@@ -293,7 +293,7 @@ public class PebbleDisplayTrend extends PebbleDisplayAbstract {
             } else if(timeLeft < (24*3600000)) {
                 int hoursLeft = Math.toIntExact(timeLeft / 3600000);
                 int minutesLeft = Math.toIntExact((timeLeft - (hoursLeft * 3600000)) / 60000);
-                Log.d(TAG,"timeLrft="+timeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
+                Log.d(TAG,"timeLeft="+timeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
                 if(hoursLeft > 0) {
                     this.dictionary.addString(MESSAGE_KEY, "End: " + hoursLeft + ":" + String.format("%02d", minutesLeft) + "h");
                 } else {
