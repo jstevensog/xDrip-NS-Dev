@@ -257,11 +257,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
             message = "";
         }
         if (message != null) {
-            buff = ByteBuffer.allocate(message.length() + 2);
-            buff.put(0, (byte) (message.length() + 1));
-            if (message.length() > 0) buff.put(message.getBytes(StandardCharsets.UTF_8), 1, message.getBytes(StandardCharsets.UTF_8).length);
-            buff.put(1 + message.length(), (byte)0);
-            dict.addBytes(FRAMEWORK_MESSAGE, buff.array());
+            dict.addString(FRAMEWORK_MESSAGE, message);
         }
         return dict;
     }
