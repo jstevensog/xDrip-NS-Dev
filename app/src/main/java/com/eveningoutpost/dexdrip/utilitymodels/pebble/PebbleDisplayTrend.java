@@ -287,13 +287,13 @@ public class PebbleDisplayTrend extends PebbleDisplayAbstract {
 
             // TODO I think special message is only appropriate with flat trend
             // Note:  Message can only be 12 characters
-            long TimeLeft = SensorDays.get().getRemainingSensorPeriodInMs();
+            long timeLeft = SensorDays.get().getRemainingSensorPeriodInMs();
             if (bgReadingS.equalsIgnoreCase(msg)) {
                 this.dictionary.addString(MESSAGE_KEY, PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_text", "BAZINGA!"));
-            } else if(TimeLeft < (24*3600000)) {
-                int hoursLeft = Math.toIntExact(TimeLeft / 3600000);
-                int minutesLeft = Math.toIntExact((TimeLeft - (hoursLeft * 3600000)) / 60000);
-                //Log.d(TAG,"TimeLeft="+TimeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
+            } else if(timeLeft < (24*3600000)) {
+                int hoursLeft = Math.toIntExact(timeLeft / 3600000);
+                int minutesLeft = Math.toIntExact((timeLeft - (hoursLeft * 3600000)) / 60000);
+                //Log.d(TAG,"timeLeft="+timeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
                 if(hoursLeft > 0) {
                     this.dictionary.addString(MESSAGE_KEY, "End: " + hoursLeft + ":" + String.format("%02d", minutesLeft) + "h");
                 } else {
