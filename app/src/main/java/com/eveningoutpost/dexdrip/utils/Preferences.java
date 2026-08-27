@@ -2371,7 +2371,7 @@ public class Preferences extends BasePreferenceActivity implements SearchPrefere
                         }
 
                         // Add New one
-                        if ((pebbleType == 3) || (pebbleType == 4) || (pebbleType == 5) || (pebbleType ==6)) {
+                        if ((pebbleType == 3) || (pebbleType == 4) || (pebbleType == 5) || (pebbleType == 6)) {
                             watchCategory.addPreference(pebbleTrend);
                             watchCategory.addPreference(pebbleFilteredLine);
                             watchCategory.addPreference(pebbleTinyDots);
