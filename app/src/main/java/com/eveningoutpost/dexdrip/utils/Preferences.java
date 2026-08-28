@@ -117,6 +117,7 @@ import com.eveningoutpost.dexdrip.utilitymodels.WholeHouse;
 import com.eveningoutpost.dexdrip.utilitymodels.pebble.PebbleUtil;
 import com.eveningoutpost.dexdrip.utilitymodels.pebble.PebbleWatchSync;
 import com.eveningoutpost.dexdrip.utilitymodels.pebble.watchface.InstallPebbleClassicTrendWatchface;
+import com.eveningoutpost.dexdrip.utilitymodels.pebble.watchface.InstallPebbleFrameworkWatchFace;
 import com.eveningoutpost.dexdrip.utilitymodels.pebble.watchface.InstallPebbleSnoozeControlApp;
 import com.eveningoutpost.dexdrip.utilitymodels.pebble.watchface.InstallPebbleTrendClayWatchFace;
 import com.eveningoutpost.dexdrip.utilitymodels.pebble.watchface.InstallPebbleTrendWatchFace;
@@ -2949,6 +2950,8 @@ public class Preferences extends BasePreferenceActivity implements SearchPrefere
                         case 5:
                             context.startActivity(new Intent(context, InstallPebbleTrendClayWatchFace.class));
                             break;
+                        case 6:
+                            context.startActivity(new Intent(context, InstallPebbleFrameworkWatchFace.class));
                     }
 
                     JoH.runOnUiThreadDelayed(new Runnable() {

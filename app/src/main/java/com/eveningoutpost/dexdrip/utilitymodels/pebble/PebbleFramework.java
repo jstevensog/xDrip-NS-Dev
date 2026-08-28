@@ -601,7 +601,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         return dict;
     }
 
-    private String lastBfReadingSent;
+/*  private String lastBfReadingSent;
 
     public PebbleDictionary buildDictionary() {
         TimeZone tz = TimeZone.getDefault();
@@ -632,26 +632,35 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         }
 
             if (!getBooleanValue("pebble_show_arrows") || no_signal) {
-                this.dictionary.addString(ICON_KEY, "0");
+                this.dictionary.addUint8(FRAMEWORK_SLOPEVAL, (byte) 0x00);
             } else {
-                this.dictionary.addString(ICON_KEY, slopeOrdinal);
+                this.dictionary.addString(FRAMEWORK_SLOPEVAL, slopeOrdinal);
             }
 
             if (no_signal) {
                 // We display last reading, even if none was sent for some time.
                 if (this.lastBfReadingSent != null) {
-                    this.dictionary.addString(BG_KEY, this.lastBfReadingSent);
-                    this.dictionary.addInt8(VIBE_KEY, (byte) (getBooleanValue("pebble_vibrate_no_signal") ? 0x01 : 0x00)); // not sure what this does exactly
+                    this.dictionary.addString(FRAMEWORK_BGL_VALUE, this.lastBfReadingSent);
+                    this.dictionary.addInt8(FRAMEWORK_VIBE, (byte) (getBooleanValue("pebble_vibrate_no_signal") ? 0x01 : 0x00)); // not sure what this does exactly
                 } else {
-                    this.dictionary.addString(BG_KEY, "?RF");
-                    this.dictionary.addInt8(VIBE_KEY, (byte) (getBooleanValue("pebble_vibrate_no_signal") ? 0x01 : 0x00));
+                    this.dictionary.addString(FRAMEWORK_BGL_VALUE, "?RF");
+                    this.dictionary.addInt8(FRAMEWORK_VIBE, (byte) (getBooleanValue("pebble_vibrate_no_signal") ? 0x01 : 0x00));
                 }
             } else {
-                this.dictionary.addString(BG_KEY, bgReadingS);
+                boolean ismmol = !Pref.getString("units", "mgdl").equals("mgdl");
+                short value  = (short) Math.round(reading.getDg_mgdl());
+                if (ismmol) value |= 0x8000;
+                int ts = (int) (reading.timestamp / 1000);
+                buff = ByteBuffer.allocate(6);
+                buff.putInt(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes(ts) : ts);
+                buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(value) : value);
+                this.dictionary.addBytes(FRAMEWORK_BGL_VALUE, buff.array());
+                Log.d(TAG, "Sending BGL value");
+                //this.dictionary.addString(FRAMEWORK_BGL_VALUE, bgReadingS);
                 if (getBooleanValue("pebble_vibe_alerts", false) && ActiveBgAlert.currentlyAlerting()) {
-                    dictionary.addInt8(VIBE_KEY, (byte) 0x03);
+                    dictionary.addInt8(FRAMEWORK_VIBE, (byte) 0x03);
                 } else {
-                    this.dictionary.addInt8(VIBE_KEY, (byte) 0x00);
+                    this.dictionary.addInt8(FRAMEWORK_VIBE, (byte) 0x00);
                 }
                 this.lastBfReadingSent = bgReadingS;
                 }
@@ -664,17 +673,17 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
             if (getBooleanValue("pebble_show_delta")) {
                 if (no_signal) {
-                    this.dictionary.addString(BG_DELTA_KEY, "No Signal");
+                    this.dictionary.addString(FRAMEWORK_BGL_DELTA, "No Signal");
                 } else {
-                    this.dictionary.addString(BG_DELTA_KEY, getBgDelta());
+                    this.dictionary.addString(FRAMEWORK_BGL_DELTA, getBgDelta());
                     if (((keyStore.getS("bwp_last_insulin") != null) && (JoH.msSince(keyStore.getL("bwp_last_insulin_timestamp")) < Constants.MINUTE_IN_MS * 11))
                             && getBooleanValue("pebble_show_bwp")) {
-                        this.dictionary.addString(BG_DELTA_KEY, PEBBLE_BWP_SYMBOL + keyStore.getS("bwp_last_insulin")); // 😐
+                        this.dictionary.addString(FRAMEWORK_BGL_DELTA, PEBBLE_BWP_SYMBOL + keyStore.getS("bwp_last_insulin")); // 😐
                     }
 
                 }
             } else {
-                this.dictionary.addString(BG_DELTA_KEY, "");
+                this.dictionary.addString(FRAMEWORK_BGL_DELTA, "");
             }
 
             String msg = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_value", "");
@@ -694,32 +703,32 @@ public class PebbleFramework extends PebbleDisplayAbstract {
             // Note:  Message can only be 12 characters
             long timeLeft = SensorDays.get().getRemainingSensorPeriodInMs();
             if (bgReadingS.equalsIgnoreCase(msg)) {
-                this.dictionary.addString(MESSAGE_KEY, PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_text", "BAZINGA!"));
+                this.dictionary.addString(FRAMEWORK_MESSAGE, PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_text", "BAZINGA!"));
             } else if(timeLeft < (24*3600000)) {
                 int hoursLeft = Math.toIntExact(timeLeft / 3600000);
                 int minutesLeft = Math.toIntExact((timeLeft - (hoursLeft * 3600000)) / 60000);
                 //Log.d(TAG,"timeLeft="+timeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
                 if(hoursLeft > 0) {
-                    this.dictionary.addString(MESSAGE_KEY, "End: " + hoursLeft + ":" + String.format("%02d", minutesLeft) + "h");
+                    this.dictionary.addString(FRAMEWORK_MESSAGE, "End: " + hoursLeft + ":" + String.format("%02d", minutesLeft) + "h");
                 } else if (minutesLeft > 0) {
-                    this.dictionary.addString(MESSAGE_KEY, "End: " + minutesLeft + " min");
+                    this.dictionary.addString(FRAMEWORK_MESSAGE, "End: " + minutesLeft + " min");
                 }
             } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart()))) {
-                this.dictionary.addString(MESSAGE_KEY, "Wait " + Math.toIntExact((SensorDays.get().getWarmupMs() /3600000)) + " min" );
-                this.dictionary.addString(BG_DELTA_KEY,"Warming Up");
+                this.dictionary.addString(FRAMEWORK_MESSAGE, "Wait " + Math.toIntExact((SensorDays.get().getWarmupMs() /3600000)) + " min" );
+                this.dictionary.addString(FRAMEWORK_BGL_DELTA,"Warming Up");
             } else {
-                this.dictionary.addString(MESSAGE_KEY, "");
+                this.dictionary.addString(FRAMEWORK_MESSAGE, "");
             }
         } else {
             Log.v(TAG, "buildDictionary: latest mBgReading is null, so sending default values");
-            this.dictionary.addString(ICON_KEY, getSlopeOrdinal());
-            this.dictionary.addString(BG_KEY, "?SN");
+            this.dictionary.addUint8(FRAMEWORK_SLOPEVAL, Byte.parseByte(getSlopeOrdinal()));
+            this.dictionary.addString(FRAMEWORK_BGL_VALUE, "?SN");
             this.dictionary.addUint32(RECORD_TIME_KEY, (int) ((new Date().getTime() + offsetFromUTC / 1000)));
-            this.dictionary.addString(BG_DELTA_KEY, "No Sensor");
-            this.dictionary.addString(MESSAGE_KEY, "");
+            this.dictionary.addString(FRAMEWORK_BGL_DELTA, "No Sensor");
+            this.dictionary.addString(FRAMEWORK_MESSAGE, "");
         }
 
-        this.dictionary.addUint32(PHONE_TIME_KEY, (int) ((new Date().getTime() + offsetFromUTC) / 1000));
+        //this.dictionary.addUint32(PHONE_TIME_KEY, (int) ((new Date().getTime() + offsetFromUTC) / 1000));
 
         if (JoH.ratelimit("add_battery_status", 60)) {
             addBatteryStatusToDictionary(this.dictionary);
@@ -729,7 +738,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
         return this.dictionary;
     }
-
+*/
     private synchronized void sendTrendToPebble(boolean clearTrend) {
         int png_depth;
         //create a sparkline bitmap to send to the pebble
