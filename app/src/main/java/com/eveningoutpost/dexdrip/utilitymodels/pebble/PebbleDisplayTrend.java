@@ -300,8 +300,7 @@ public class PebbleDisplayTrend extends PebbleDisplayAbstract {
                     this.dictionary.addString(MESSAGE_KEY, "End: " + minutesLeft + " min");
                 }
             } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart()))) {
-                this.dictionary.addString(MESSAGE_KEY, "Wait " + Math.toIntExact(SensorDays.get().getWarmupMs()/3600000) + " min" );
-                //this.dictionary.addString(BG_DELTA_KEY,"Warming Up");
+                this.dictionary.addString(MESSAGE_KEY, "Wait " + Math.toIntExact(SensorDays.get().getWarmupMs()/60000) + " min" );
             } else {
                 this.dictionary.addString(MESSAGE_KEY, "");
             }
