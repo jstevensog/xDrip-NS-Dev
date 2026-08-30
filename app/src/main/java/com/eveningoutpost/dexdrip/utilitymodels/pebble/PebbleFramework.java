@@ -65,27 +65,6 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
     private final static String TAG = PebbleFramework.class.getSimpleName();
 
-   /*
-    public static final int ICON_KEY = 0;
-    public static final int BG_KEY = 1;
-    public static final int RECORD_TIME_KEY = 2;
-    public static final int PHONE_TIME_KEY = 3;
-    public static final int BG_DELTA_KEY = 4;
-    public static final int UPLOADER_BATTERY_KEY = 5;
-    public static final int NAME_KEY = 6;
-    public static final int TREND_BEGIN_KEY = 7;
-    public static final int TREND_DATA_KEY = 8;
-    public static final int TREND_END_KEY = 9;
-    public static final int MESSAGE_KEY = 10;
-    public static final int VIBE_KEY = 11;
-
-    private static final int NO_BLUETOOTH_KEY = 111;
-    private static final int COLLECT_HEALTH_KEY = 112;
-
-    public static final int SYNC_KEY = 1000;
-    public static final int PLATFORM_KEY = 1001;
-    public static final int VERSION_KEY = 1002;
-    */
     private static final int CHUNK_SIZE = 100;
     public static final boolean d = true;
 
@@ -106,15 +85,10 @@ public class PebbleFramework extends PebbleDisplayAbstract {
     private static boolean didTrend = false;
     private static final ReentrantLock lock = new ReentrantLock();
 
-    private static long pebble_platform = -1;
-    private static String pebble_app_version = "";
-    private static long pebble_sync_value = 0;
     private static long pebble_trend_size = 0;
-    private static boolean sentInitialSync = false;
 
     private boolean no_signal = false;
     private BgGraphBuilder bgGraphBuilder;
-    private BgReading mBgReading;
     private static short sendStep = 5;
     private final PebbleDictionary dictionary = new PebbleDictionary();
 
@@ -251,9 +225,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart())) && !Ob1G5CollectionService.isCollecting()) {
             double timeleft = (SensorDays.get().getWarmupMs() - JoH.msSince(SensorDays.get().getStart())) / 60000.0;
             message = String.format("Wait %.1fm",  timeleft >= 0.0 ? timeleft : 0.0);
-            //message = "Wait " + ((int) (SensorDays.get().getWarmupMs()/(60000))) + " min";
-            //this.dictionary.addString(BG_DELTA_KEY,"Warming Up");
-        } else {
+       } else {
             message = "";
         }
         if (message != null) {
@@ -601,144 +573,6 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         return dict;
     }
 
-/*  private String lastBfReadingSent;
-
-    public PebbleDictionary buildDictionary() {
-        TimeZone tz = TimeZone.getDefault();
-        Date now = new Date();
-        int offsetFromUTC = tz.getOffset(now.getTime());
-
-       // if (this.dictionary == null) {
-       //     this.dictionary = new PebbleDictionary();
-       // }
-
-        if (use_best_glucose ? (this.dg != null) : (this.bgReading != null)) {
-            boolean no_signal;
-
-            final String slopeOrdinal = getSlopeOrdinal();
-            final String bgReadingS = getBgReading();
-
-            if (use_best_glucose)
-            {
-                Log.v(TAG, "buildDictionary: slopeOrdinal-" + slopeOrdinal + " bgReading-" + bgReadingS + //
-                        " now-" + (int) now.getTime() / 1000 + " bgTime-" + (int) (dg.timestamp / 1000) + //
-                        " phoneTime-" + (int) (new Date().getTime() / 1000) + " getBgDelta-" + getBgDelta());
-                no_signal = (dg.mssince > Home.stale_data_millis());
-        } else {
-                Log.v(TAG, "buildDictionary: slopeOrdinal-" + slopeOrdinal + " bgReading-" + bgReadingS + //
-                        " now-" + (int) now.getTime() / 1000 + " bgTime-" + (int) (this.bgReading.timestamp / 1000) + //
-                        " phoneTime-" + (int) (new Date().getTime() / 1000) + " getBgDelta-" + getBgDelta());
-                no_signal = ((new Date().getTime()) - Home.stale_data_millis() - this.bgReading.timestamp > 0);
-        }
-
-            if (!getBooleanValue("pebble_show_arrows") || no_signal) {
-                this.dictionary.addUint8(FRAMEWORK_SLOPEVAL, (byte) 0x00);
-            } else {
-                this.dictionary.addString(FRAMEWORK_SLOPEVAL, slopeOrdinal);
-            }
-
-            if (no_signal) {
-                // We display last reading, even if none was sent for some time.
-                if (this.lastBfReadingSent != null) {
-                    this.dictionary.addString(FRAMEWORK_BGL_VALUE, this.lastBfReadingSent);
-                    this.dictionary.addInt8(FRAMEWORK_VIBE, (byte) (getBooleanValue("pebble_vibrate_no_signal") ? 0x01 : 0x00)); // not sure what this does exactly
-                } else {
-                    this.dictionary.addString(FRAMEWORK_BGL_VALUE, "?RF");
-                    this.dictionary.addInt8(FRAMEWORK_VIBE, (byte) (getBooleanValue("pebble_vibrate_no_signal") ? 0x01 : 0x00));
-                }
-            } else {
-                boolean ismmol = !Pref.getString("units", "mgdl").equals("mgdl");
-                short value  = (short) Math.round(reading.getDg_mgdl());
-                if (ismmol) value |= 0x8000;
-                int ts = (int) (reading.timestamp / 1000);
-                buff = ByteBuffer.allocate(6);
-                buff.putInt(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes(ts) : ts);
-                buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(value) : value);
-                this.dictionary.addBytes(FRAMEWORK_BGL_VALUE, buff.array());
-                Log.d(TAG, "Sending BGL value");
-                //this.dictionary.addString(FRAMEWORK_BGL_VALUE, bgReadingS);
-                if (getBooleanValue("pebble_vibe_alerts", false) && ActiveBgAlert.currentlyAlerting()) {
-                    dictionary.addInt8(FRAMEWORK_VIBE, (byte) 0x03);
-                } else {
-                    this.dictionary.addInt8(FRAMEWORK_VIBE, (byte) 0x00);
-                }
-                this.lastBfReadingSent = bgReadingS;
-                }
-
-            if (use_best_glucose) {
-                this.dictionary.addUint32(RECORD_TIME_KEY, (int) (((dg.timestamp + offsetFromUTC) / 1000)));
-            } else {
-                this.dictionary.addUint32(RECORD_TIME_KEY, (int) (((this.bgReading.timestamp + offsetFromUTC) / 1000)));
-            }
-
-            if (getBooleanValue("pebble_show_delta")) {
-                if (no_signal) {
-                    this.dictionary.addString(FRAMEWORK_BGL_DELTA, "No Signal");
-                } else {
-                    this.dictionary.addString(FRAMEWORK_BGL_DELTA, getBgDelta());
-                    if (((keyStore.getS("bwp_last_insulin") != null) && (JoH.msSince(keyStore.getL("bwp_last_insulin_timestamp")) < Constants.MINUTE_IN_MS * 11))
-                            && getBooleanValue("pebble_show_bwp")) {
-                        this.dictionary.addString(FRAMEWORK_BGL_DELTA, PEBBLE_BWP_SYMBOL + keyStore.getS("bwp_last_insulin")); // 😐
-                    }
-
-                }
-            } else {
-                this.dictionary.addString(FRAMEWORK_BGL_DELTA, "");
-            }
-
-            String msg = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_value", "");
-
-            byte bluetooth_key_byte = (byte) (getBooleanValue("pebble_vibrate_no_bluetooth") ? 0x01 : 0x00);
-            this.dictionary.addInt8(NO_BLUETOOTH_KEY, bluetooth_key_byte);
-
-            byte collect_health_key_byte = (byte) (getBooleanValue("use_pebble_health") ? 0x01 : 0x00);
-            if ((collect_health_key_byte != last_collect_health_key_byte) || JoH.ratelimit("collect_health_key_byte", 3)) {
-                this.dictionary.addInt8(COLLECT_HEALTH_KEY, collect_health_key_byte);
-                last_collect_health_key_byte = collect_health_key_byte;
-            } else {
-                this.dictionary.remove(COLLECT_HEALTH_KEY);
-            }
-
-            // TODO I think special message is only appropriate with flat trend
-            // Note:  Message can only be 12 characters
-            long timeLeft = SensorDays.get().getRemainingSensorPeriodInMs();
-            if (bgReadingS.equalsIgnoreCase(msg)) {
-                this.dictionary.addString(FRAMEWORK_MESSAGE, PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_text", "BAZINGA!"));
-            } else if(timeLeft < (24*3600000)) {
-                int hoursLeft = Math.toIntExact(timeLeft / 3600000);
-                int minutesLeft = Math.toIntExact((timeLeft - (hoursLeft * 3600000)) / 60000);
-                //Log.d(TAG,"timeLeft="+timeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
-                if(hoursLeft > 0) {
-                    this.dictionary.addString(FRAMEWORK_MESSAGE, "End: " + hoursLeft + ":" + String.format("%02d", minutesLeft) + "h");
-                } else if (minutesLeft > 0) {
-                    this.dictionary.addString(FRAMEWORK_MESSAGE, "End: " + minutesLeft + " min");
-                }
-            } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart()))) {
-                this.dictionary.addString(FRAMEWORK_MESSAGE, "Wait " + Math.toIntExact((SensorDays.get().getWarmupMs() /3600000)) + " min" );
-                this.dictionary.addString(FRAMEWORK_BGL_DELTA,"Warming Up");
-            } else {
-                this.dictionary.addString(FRAMEWORK_MESSAGE, "");
-            }
-        } else {
-            Log.v(TAG, "buildDictionary: latest mBgReading is null, so sending default values");
-            this.dictionary.addUint8(FRAMEWORK_SLOPEVAL, Byte.parseByte(getSlopeOrdinal()));
-            this.dictionary.addString(FRAMEWORK_BGL_VALUE, "?SN");
-            this.dictionary.addUint32(RECORD_TIME_KEY, (int) ((new Date().getTime() + offsetFromUTC / 1000)));
-            this.dictionary.addString(FRAMEWORK_BGL_DELTA, "No Sensor");
-            this.dictionary.addString(FRAMEWORK_MESSAGE, "");
-        }
-
-        //this.dictionary.addUint32(PHONE_TIME_KEY, (int) ((new Date().getTime() + offsetFromUTC) / 1000));
-
-        if (JoH.ratelimit("add_battery_status", 60)) {
-            addBatteryStatusToDictionary(this.dictionary);
-        } else {
-            removeBatteryStatusFromDictionary(this.dictionary);
-    }
-
-        return this.dictionary;
-    }
-*/
     private synchronized void sendTrendToPebble(boolean clearTrend) {
         int png_depth;
         //create a sparkline bitmap to send to the pebble
