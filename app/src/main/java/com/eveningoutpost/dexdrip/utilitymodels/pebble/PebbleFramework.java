@@ -909,6 +909,6 @@ public class PebbleFramework extends PebbleDisplayAbstract {
     }
     public UUID watchfaceUUID()
     {
-        return UUID.fromString("51a6140e-92cc-420f-aef6-51b229666742");
+        return UUID.fromString("240ff2d2-a64a-11f1-9d00-c74dac4ca2e6");
     }
 }
