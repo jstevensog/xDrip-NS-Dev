@@ -479,6 +479,9 @@
             android:name=".utilitymodels.pebble.watchface.InstallPebbleTrendClayWatchFace"
             android:label="Install Pebble Clay Watchface" />
         <activity
+            android:name=".utilitymodels.pebble.watchface.InstallPebbleFrameworkWatchFace"
+            android:label="Install Pebble Framework Watchface" />
+        <activity
             android:name=".utilitymodels.pebble.watchface.InstallPebbleSnoozeControlApp"
             android:label="@string/install_pebble_snooze_control_app" />
         <activity

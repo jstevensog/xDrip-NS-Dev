@@ -1,5 +1,6 @@
 package com.eveningoutpost.dexdrip.utilitymodels.pebble;
 
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.PowerManager;
 import android.preference.PreferenceManager;
@@ -289,7 +290,8 @@ public class PebbleDisplayTrend extends PebbleDisplayAbstract {
             // Note:  Message can only be 12 characters
             long timeLeft = SensorDays.get().getRemainingSensorPeriodInMs();
             if (bgReadingS.equalsIgnoreCase(msg)) {
-                this.dictionary.addString(MESSAGE_KEY, PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_text", "BAZINGA!"));
+                //this.dictionary.addString(MESSAGE_KEY, PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_text", "BAZINGA!"));
+                this.dictionary.addString(MESSAGE_KEY, this.context.getApplicationContext().getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE).getString("pebble_special_text", "BAZINGA!"));
             } else if(timeLeft < (24*3600000)) {
                 int hoursLeft = Math.toIntExact(timeLeft / 3600000);
                 int minutesLeft = Math.toIntExact((timeLeft - (hoursLeft * 3600000)) / 60000);
@@ -300,7 +302,7 @@ public class PebbleDisplayTrend extends PebbleDisplayAbstract {
                     this.dictionary.addString(MESSAGE_KEY, "End: " + minutesLeft + " min");
                 }
             } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart()))) {
-                this.dictionary.addString(MESSAGE_KEY, "Wait " + Math.toIntExact((SensorDays.get().getWarmupMs() /3600000)) + " min" );
+                this.dictionary.addString(MESSAGE_KEY, "Wait " + Math.toIntExact((SensorDays.get().getWarmupMs() /600000)) + " min" );
                 this.dictionary.addString(BG_DELTA_KEY,"Warming Up");
             } else {
                 this.dictionary.addString(MESSAGE_KEY, "");

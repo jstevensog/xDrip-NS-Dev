@@ -207,14 +207,14 @@ public class PebbleFramework extends PebbleDisplayAbstract {
     }
 
     private PebbleDictionary sendMessage(PebbleDictionary dict) {
-        long TimeLeft = SensorDays.get().getRemainingSensorPeriodInMs();
+        long timeLeft = SensorDays.get().getRemainingSensorPeriodInMs();
         String message = null;
         if (getBgReading().equalsIgnoreCase(PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_value", ""))) {
             message =  PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_text", "BAZINGA!");
-        } else if(TimeLeft < (24*3600000)) { // less than a day left
-            int hoursLeft = Math.toIntExact(TimeLeft / 3600000);
-            int minutesLeft = Math.toIntExact((TimeLeft - (hoursLeft * 3600000)) / 60000);
-            Log.d(TAG,"TimreLrft="+TimeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
+        } else if(timeLeft < (24*3600000)) { // less than a day left
+            long hoursLeft = Math.toIntExact(timeLeft / 3600000);
+            int minutesLeft = Math.toIntExact((timeLeft - (hoursLeft * 3600000)) / 60000);
+            Log.d(TAG,"timeLeft="+timeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
             if(hoursLeft > 0) {
                 message = "End: " + hoursLeft + ":" + String.format("%02d", minutesLeft) + "h";
             } else if (minutesLeft > 0) {
