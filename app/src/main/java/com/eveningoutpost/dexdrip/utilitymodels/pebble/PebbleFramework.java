@@ -330,24 +330,34 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                 (int) reading.calculated_value == SPECIAL_VALUE_MINIMALLY_EGV_AB ||
                 (int) reading.calculated_value == SPECIAL_VALUE_SENSOR_NOT_ACTIVE))
                 ) { // traffic light
+            Log.d(TAG,"sendSlope: sending value 12 - No Sensor");
             dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 12);
         } else if ( (no_signal && !(Ob1G5CollectionService.isG5WarmingUp() || Ob1G5CollectionService.isPendingStart())) || (reading != null && (
                 (int) reading.calculated_value == SPECIAL_VALUE_NO_RF ||
                 (int) reading.calculated_value == SPECIAL_VALUE_NP_ANTENNA))
                 ) { // broken antenna
+            Log.d(TAG,"sendSlope: sending value 10 - No Signal");
             dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 10);
         } else if (  (reading != null && reading.calibration != null && !reading.calibration.isValid()) ||
                 (reading != null && (int) reading.calculated_value == SPECIAL_VALUE_SENSOR_OUT_OF_CALIBRATION)
                 ) { // blood drop
+            Log.d(TAG,"sendSlope: sending value 12 - Blood Drop");
             dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 11);
-        } else if (reading != null && ((int) reading.calculated_value == SPECIAL_VALUE_ABSOLUTE_AB || (int) reading.calculated_value == SPECIAL_VALUE_POWER_AB)) { // question marks
+        } else if (reading != null && (
+                (int) reading.calculated_value == SPECIAL_VALUE_ABSOLUTE_AB ||
+                (int) reading.calculated_value == SPECIAL_VALUE_POWER_AB)
+                ) { // question marks
+            Log.d(TAG,"sendSlope: sending value 14 - Bad Reading");
             dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 14);
         } else if (Ob1G5CollectionService.isG5WarmingUp() || Ob1G5CollectionService.isPendingStart()) { // hourglass
             // this should represent the warmup period of the sensor
+            Log.d(TAG,"sendSlope: sending value 13 - Hourglass");
             dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 13);
         } else if (!getBooleanValue("pebble_show_arrows")) {
+            Log.d(TAG,"sendSlope: sending value 0 - No Arrow");
             dict.addUint8(FRAMEWORK_SLOPEVAL, (byte) 0);
         } else {
+            Log.d(TAG,"sendSlope: sending value " + getSlopeOrdinalUint8());
             dict.addUint8(FRAMEWORK_SLOPEVAL, getSlopeOrdinalUint8());
         }
         return dict;
