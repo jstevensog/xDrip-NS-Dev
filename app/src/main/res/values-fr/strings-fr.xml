@@ -362,6 +362,9 @@
     <string name="all_alerts_disabled_until">"Toutes les alertes désactivées jusqu'à "</string>
     <string name="low_alerts_disabled_until">"Alertes Basses désactivées jusqu'à  "</string>
     <string name="high_alerts_disabled_until">"Alertes Hautes désactivées jusqu'à "</string>
+    <string name="you_reenable">vous réactivez</string>
+    <string name="active_alert_rerise_at">L\'alerte active nommée \"%1$s\" existe. Alerte se reproduira à %2$s (%3$s minutes restantes)</string>
+    <string name="active_alert_snoozed_until">L\'alerte active nommée \"%1$s\" existe. Alerte se reproduira à %2$s (%3$s minutes restantes)</string>
     <string name="default_snooze">Mise en veille par défaut</string>
     <string name="until_you_reenable">Jusqu\'à ce que vous réactivez</string>
     <string name="set">Accepter</string>
@@ -654,6 +657,7 @@
     <string name="retrieve_blukon_history_title">Récupérer l\'historique du Freestyle Libre</string>
     <string name="summary_libre_one_minute_interval">Accepter les données à intervalles d\'une minute de Libre. Redémarrez votre téléphone pour que les modifications prennent effet.</string>
     <string name="title_libre_one_minute_interval">Libre 1 minute</string>
+    <string name="summary_nsfollow_sample_period">Par défaut : 5 min\nActuel : %s</string>
     <string name="retrieve_blukon_history_summary">Extraire l\'historique manqué du périphérique BluCon lors de la reconnexion au capteur.</string>
     <string name="interpret_share_raw">Si vous utilisez Share, xDrip affichera les valeurs quand elles sont normalement cachées sur le récepteur.</string>
     <string name="interpret_raw">Interpréter les valeurs brutes</string>
