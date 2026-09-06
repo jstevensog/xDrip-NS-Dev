@@ -484,28 +484,33 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                     long start = timestamp == 0 ? end - (60000 * 60 * trendPeriod) - (60000 * 10) : (timestamp * 1000) - (4 * 60000);
                     lastTrendPeriod = trendPeriod;
                     List<BgReading> readings = BgReading.latestForGraph(200, start, end);
-                    last_seen_timestamp = readings.get(0).timestamp / 1000;
+                    try {
+                        last_seen_timestamp = readings.get(0).timestamp / 1000;
 
-                    Log.d(TAG, "Trend size: " + readings.size());
-                    boolean ismmol = !Pref.getString("units", "mgdl").equals("mgdl");
-                    // strip known (timestamp is a known value)
-                    if (readings.get(readings.size()-1).timestamp / 1000 == timestamp) readings.remove(readings.size()-1); // check if oldest is the timestamp
-                    if (readings.size() > 1 && time_series) {
-                        // convert to uint16
-                        buff = ByteBuffer.allocate(4 + 2 + readings.size() * 2);
-                        int ts = (int) (readings.get(0).timestamp / 1000);
-                        buff.putInt(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes(ts) : ts);
-                        buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) readings.size()) : (short) readings.size());
-                        for (int i = 0; i < readings.size(); i++) {
-                            short value = (short) Math.round(readings.get(readings.size() - 1 - i).getDg_mgdl());
-                            Log.d(TAG, "Trend data: " + readings.get(readings.size() - 1 - i).getDg_mgdl() + " value: " + value + " - Time: " + readings.get(readings.size() - 1 - i).timestamp / 1000);
-                            if (ismmol) value |= 0x8000;
-                            buff.putShort(6 + i * 2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(value) : value); // convert endianess if need be
+                        Log.d(TAG, "Trend size: " + readings.size());
+                        boolean ismmol = !Pref.getString("units", "mgdl").equals("mgdl");
+                        // strip known (timestamp is a known value)
+                        if (readings.get(readings.size() - 1).timestamp / 1000 == timestamp)
+                            readings.remove(readings.size() - 1); // check if oldest is the timestamp
+                        if (readings.size() > 1 && time_series) {
+                            // convert to uint16
+                            buff = ByteBuffer.allocate(4 + 2 + readings.size() * 2);
+                            int ts = (int) (readings.get(0).timestamp / 1000);
+                            buff.putInt(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes(ts) : ts);
+                            buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) readings.size()) : (short) readings.size());
+                            for (int i = 0; i < readings.size(); i++) {
+                                short value = (short) Math.round(readings.get(readings.size() - 1 - i).getDg_mgdl());
+                                Log.d(TAG, "Trend data: " + readings.get(readings.size() - 1 - i).getDg_mgdl() + " value: " + value + " - Time: " + readings.get(readings.size() - 1 - i).timestamp / 1000);
+                                if (ismmol) value |= 0x8000;
+                                buff.putShort(6 + i * 2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(value) : value); // convert endianess if need be
+                            }
+                            dict.addBytes(FRAMEWORK_BGL_SERIES, buff.array());
+                            Log.d(TAG, "Sending bgl series");
+                        } else if (readings.size() == 1 || !time_series) {
+                            sendBgl(dict, readings.get(0));
                         }
-                        dict.addBytes(FRAMEWORK_BGL_SERIES, buff.array());
-                        Log.d(TAG, "Sending bgl series");
-                    } else if (readings.size() == 1 || !time_series){
-                        sendBgl(dict, readings.get(0));
+                    } catch (java.lang.IndexOutOfBoundsException e) {
+                        // no data
                     }
 
                 }
