@@ -497,7 +497,9 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                             buff = ByteBuffer.allocate(4 + 2 + readings.size() * 2);
                             int ts = (int) (readings.get(0).timestamp / 1000);
                             buff.putInt(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes(ts) : ts);
-                            buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) readings.size()) : (short) readings.size());
+                            short length = (short) readings.size();
+                            if (!doWeDisplayTrendData()) length |= 0x8000;
+                            buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(length) : length);
                             for (int i = 0; i < readings.size(); i++) {
                                 short value = (short) Math.round(readings.get(readings.size() - 1 - i).getDg_mgdl());
                                 Log.d(TAG, "Trend data: " + readings.get(readings.size() - 1 - i).getDg_mgdl() + " value: " + value + " - Time: " + readings.get(readings.size() - 1 - i).timestamp / 1000);
@@ -580,10 +582,16 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         }
         final byte[] img = SimpleImageEncoder.encodeBitmapAsPNG(bgTrend, colour, !colour ? 2: png_depth, true);
 
-        image_size = img.length;
-        buff = ByteBuffer.wrap(img);
+        short img_size = (short) img.length;
+
+        buff = ByteBuffer.allocate(img.length + 2);
+        Log.d(TAG, "Sending PNG: " + buff.array().length + " img: " + img.length);
+
+        if (!doWeDisplayTrendData()) img_size |= 0x8000; // hide trend but do send
+        buff.put((byte) (img_size & 0x00FF));
+        buff.put((byte) (img_size >> 8));
+        buff.put(img);
         bgTrend.recycle();
-        Log.d(TAG, "Sending PNG: " + buff.array().length);
         dict.addBytes(FRAMEWORK_PNG_IMAGE, buff.array());
         return dict;
     }
