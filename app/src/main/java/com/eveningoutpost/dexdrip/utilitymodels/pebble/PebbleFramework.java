@@ -225,7 +225,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart())) && !Ob1G5CollectionService.isCollecting()) {
             double timeleft = (SensorDays.get().getWarmupMs() - JoH.msSince(SensorDays.get().getStart())) / 60000.0;
             message = String.format("Wait %.1fm",  timeleft >= 0.0 ? timeleft : 0.0);
-       } else {
+        } else {
             message = "";
         }
         if (message != null) {
@@ -484,28 +484,35 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                     long start = timestamp == 0 ? end - (60000 * 60 * trendPeriod) - (60000 * 10) : (timestamp * 1000) - (4 * 60000);
                     lastTrendPeriod = trendPeriod;
                     List<BgReading> readings = BgReading.latestForGraph(200, start, end);
-                    last_seen_timestamp = readings.get(0).timestamp / 1000;
+                    try {
+                        last_seen_timestamp = readings.get(0).timestamp / 1000;
 
-                    Log.d(TAG, "Trend size: " + readings.size());
-                    boolean ismmol = !Pref.getString("units", "mgdl").equals("mgdl");
-                    // strip known (timestamp is a known value)
-                    if (readings.get(readings.size()-1).timestamp / 1000 == timestamp) readings.remove(readings.size()-1); // check if oldest is the timestamp
-                    if (readings.size() > 1 && time_series) {
-                        // convert to uint16
-                        buff = ByteBuffer.allocate(4 + 2 + readings.size() * 2);
-                        int ts = (int) (readings.get(0).timestamp / 1000);
-                        buff.putInt(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes(ts) : ts);
-                        buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) readings.size()) : (short) readings.size());
-                        for (int i = 0; i < readings.size(); i++) {
-                            short value = (short) Math.round(readings.get(readings.size() - 1 - i).getDg_mgdl());
-                            Log.d(TAG, "Trend data: " + readings.get(readings.size() - 1 - i).getDg_mgdl() + " value: " + value + " - Time: " + readings.get(readings.size() - 1 - i).timestamp / 1000);
-                            if (ismmol) value |= 0x8000;
-                            buff.putShort(6 + i * 2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(value) : value); // convert endianess if need be
+                        Log.d(TAG, "Trend size: " + readings.size());
+                        boolean ismmol = !Pref.getString("units", "mgdl").equals("mgdl");
+                        // strip known (timestamp is a known value)
+                        if (readings.get(readings.size() - 1).timestamp / 1000 == timestamp)
+                            readings.remove(readings.size() - 1); // check if oldest is the timestamp
+                        if (readings.size() > 1 && time_series) {
+                            // convert to uint16
+                            buff = ByteBuffer.allocate(4 + 2 + readings.size() * 2);
+                            int ts = (int) (readings.get(0).timestamp / 1000);
+                            buff.putInt(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes(ts) : ts);
+                            short length = (short) readings.size();
+                            if (!doWeDisplayTrendData()) length |= 0x8000;
+                            buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(length) : length);
+                            for (int i = 0; i < readings.size(); i++) {
+                                short value = (short) Math.round(readings.get(readings.size() - 1 - i).getDg_mgdl());
+                                Log.d(TAG, "Trend data: " + readings.get(readings.size() - 1 - i).getDg_mgdl() + " value: " + value + " - Time: " + readings.get(readings.size() - 1 - i).timestamp / 1000);
+                                if (ismmol) value |= 0x8000;
+                                buff.putShort(6 + i * 2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(value) : value); // convert endianess if need be
+                            }
+                            dict.addBytes(FRAMEWORK_BGL_SERIES, buff.array());
+                            Log.d(TAG, "Sending bgl series");
+                        } else if (readings.size() == 1 || !time_series) {
+                            sendBgl(dict, readings.get(0));
                         }
-                        dict.addBytes(FRAMEWORK_BGL_SERIES, buff.array());
-                        Log.d(TAG, "Sending bgl series");
-                    } else if (readings.size() == 1 || !time_series){
-                        sendBgl(dict, readings.get(0));
+                    } catch (java.lang.IndexOutOfBoundsException e) {
+                        // no data
                     }
 
                 }
@@ -575,10 +582,16 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         }
         final byte[] img = SimpleImageEncoder.encodeBitmapAsPNG(bgTrend, colour, !colour ? 2: png_depth, true);
 
-        image_size = img.length;
-        buff = ByteBuffer.wrap(img);
+        short img_size = (short) img.length;
+
+        buff = ByteBuffer.allocate(img.length + 2);
+        Log.d(TAG, "Sending PNG: " + buff.array().length + " img: " + img.length);
+
+        if (!doWeDisplayTrendData()) img_size |= 0x8000; // hide trend but do send
+        buff.put((byte) (img_size & 0x00FF));
+        buff.put((byte) (img_size >> 8));
+        buff.put(img);
         bgTrend.recycle();
-        Log.d(TAG, "Sending PNG: " + buff.array().length);
         dict.addBytes(FRAMEWORK_PNG_IMAGE, buff.array());
         return dict;
     }
