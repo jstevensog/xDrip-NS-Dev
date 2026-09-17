@@ -273,7 +273,8 @@ public class PebbleDisplayTrend extends PebbleDisplayAbstract {
                 this.dictionary.addString(BG_DELTA_KEY, "");
             }
 
-            String msg = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_value", "");
+            //String msg = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_value", "");
+            String msg = this.context.getApplicationContext().getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE).getString("pebble_special_value", "");
 
             byte bluetooth_key_byte = (byte) (getBooleanValue("pebble_vibrate_no_bluetooth") ? 0x01 : 0x00);
             this.dictionary.addInt8(NO_BLUETOOTH_KEY, bluetooth_key_byte);

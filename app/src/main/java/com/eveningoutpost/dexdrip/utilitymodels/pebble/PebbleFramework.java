@@ -365,22 +365,23 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
     private PebbleDictionary sendHighLimit(PebbleDictionary dict, boolean force) {
         boolean highLine = getBooleanValue("pebble_high_line");
-        SharedPreferences perfs = PreferenceManager.getDefaultSharedPreferences(context);
+        //SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences prefs = this.context.getApplicationContext().getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE);
         short high_line = 0;
         // the hig/low line values are set as strings and can thus be in mmol/l
         if (!highLine) {
             high_line = 0;
-        } else if (Double.parseDouble(perfs.getString("highValue", "170")) < 25) {
-            high_line = (short) (tolerantParseDouble(perfs.getString("highValue", "10.0"), 10.0) / Constants.MGDL_TO_MMOLL);
+        } else if (Double.parseDouble(prefs.getString("highValue", "170")) < 25) {
+            high_line = (short) (tolerantParseDouble(prefs.getString("highValue", "10.0"), 10.0) / Constants.MGDL_TO_MMOLL);
         } else {
-            high_line = (short) tolerantParseInt(perfs.getString("highValue", "170"), 170);
+            high_line = (short) tolerantParseInt(prefs.getString("highValue", "170"), 170);
         }
         short high_limit_val = (short) Pref.getStringToInt("default_ymax", 250);
         buff = ByteBuffer.allocate(4);
         buff.putShort(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) high_line) : (short) high_line);
         buff.putShort(2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) high_limit_val) : (short) high_limit_val);
         if ((!highLine && high_line_store != 0) || (highLine && high_line_store == 0) || high_line != high_line_store || force) {
-            Log.d(TAG, "High values: " + high_line + " // " + high_limit_val + " // " + perfs.getString("highValue", "170"));
+            Log.d(TAG, "High values: " + high_line + " // " + high_limit_val + " // " + prefs.getString("highValue", "170"));
             high_line_store = high_line;
             dict.addBytes(FRAMEWORK_HIGHLIMIT, buff.array());
         }
@@ -389,14 +390,14 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
     private PebbleDictionary sendLowLimit(PebbleDictionary dict, boolean force) {
         boolean lowLine = getBooleanValue("pebble_low_line");
-        SharedPreferences perfs = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences prefs = this.context.getApplicationContext().getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE);
         short low_line = 0;
         if (!lowLine) {
             low_line = 0;
-        } else if (Double.parseDouble(perfs.getString("lowValue", "70")) < 25) {
-            low_line = (short) (tolerantParseDouble(perfs.getString("lowValue", "2.2"), 2.2) / Constants.MGDL_TO_MMOLL);
+        } else if (Double.parseDouble(prefs.getString("lowValue", "70")) < 25) {
+            low_line = (short) (tolerantParseDouble(prefs.getString("lowValue", "2.2"), 2.2) / Constants.MGDL_TO_MMOLL);
         } else {
-            low_line = (short) tolerantParseInt(perfs.getString("lowValue", "70"), 70);
+            low_line = (short) tolerantParseInt(prefs.getString("lowValue", "70"), 70);
         }
         short low_limit_val = (short) Pref.getStringToInt("default_ymin", 40);
 
@@ -476,7 +477,8 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
                 if (data.contains(FRAMEWORK_BGL_VALUE)) {
                     long timestamp = data.getUnsignedIntegerAsLong(FRAMEWORK_BGL_VALUE);
-                    String trendPeriodString = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_trend_period", "3");
+                    //String trendPeriodString = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_trend_period", "3");
+                    String trendPeriodString = this.context.getApplicationContext().getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE).getString("pebble_trend_period", "3");
                     int trendPeriod = Integer.parseInt(trendPeriodString);
                     Log.d(TAG, "Trend period: " + trendPeriod + " - " + lastTrendPeriod + " Since: " + timestamp);
 
@@ -545,7 +547,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         boolean highLine = getBooleanValue("pebble_high_line");
         boolean lowLine = getBooleanValue("pebble_low_line");
 
-        String trendPeriodString = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_trend_period", "3");
+        String trendPeriodString = this.context.getApplicationContext().getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE).getString("pebble_trend_period", "3");
         Integer trendPeriod = Integer.parseInt(trendPeriodString);
 
         if ((trendPeriod != lastTrendPeriod) || (JoH.ratelimit("pebble-bggraphbuilder",60)))
