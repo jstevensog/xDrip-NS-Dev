@@ -633,7 +633,7 @@ public class NightscoutUploader {
                         JoH.showNotification("Nightscout Failure", "REST-API upload to Nightscout has failed " + last_exception_count
                                         + " times. With message: " + last_exception + " " + ((last_success_time > 0) ? "Last succeeded: " + JoH.dateTimeText(last_success_time) : ""),
 
-                                MegaStatus.getStatusPendingIntent("Uploaders"), Constants.NIGHTSCOUT_ERROR_NOTIFICATION_ID, NotificationChannels.NIGHTSCOUT_UPLOADER_CHANNEL, false, false, null, null, msg);
+                                MegaStatus.getStatusPendingIntent("Uploaders"), Constants.NIGHTSCOUT_ERROR_NOTIFICATION_ID, NotificationChannels.GENERAL_CHANNEL, false, false, null, null, msg);
                         UserError.Log.uel(TAG, "REST-API upload to Nightscout has failed");
                     } else {
                         Log.e(TAG, "Cannot alert for nightscout failures as preference setting is disabled");
@@ -1129,7 +1129,7 @@ public class NightscoutUploader {
         }
 
         if (DexCollectionType.hasWifi()) {
-            batteries.add(NightscoutBatteryDevice.PARAKEET);
+            batteries.add(NightscoutBatteryDevice.WIFI_UPLOADER);
         }
 
         boolean sendDexcomTxBattery = Pref.getBooleanDefaultFalse("send_ob1dex_tx_battery_to_nightscout");
