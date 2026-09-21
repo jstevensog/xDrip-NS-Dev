@@ -209,8 +209,9 @@ public class PebbleFramework extends PebbleDisplayAbstract {
     private PebbleDictionary sendMessage(PebbleDictionary dict) {
         long timeLeft = SensorDays.get().getRemainingSensorPeriodInMs();
         String message = null;
-        if (getBgReading().equalsIgnoreCase(PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_value", ""))) {
-            message =  PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_special_text", "BAZINGA!");
+        Log.d(TAG, "sendMessage: sensorDays.isvalid = " + SensorDays.get().isValid() + ", isG5WarmingUp = " + Ob1G5CollectionService.isG5WarmingUp() + ", isPendingStart = " + Ob1G5CollectionService.isPendingStart() + ", isCollecting = " +  Ob1G5CollectionService.isCollecting());
+        if (getBgReading().equalsIgnoreCase(this.context.getApplicationContext().getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE).getString("pebble_special_value", ""))) {
+            message =  this.context.getApplicationContext().getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE).getString("pebble_special_text", "BAZINGA!");
         } else if(timeLeft < (24*3600000)) { // less than a day left
             long hoursLeft = Math.toIntExact(timeLeft / 3600000);
             int minutesLeft = Math.toIntExact((timeLeft - (hoursLeft * 3600000)) / 60000);
@@ -224,7 +225,9 @@ public class PebbleFramework extends PebbleDisplayAbstract {
             }
         } else if(SensorDays.get().isValid() && (Ob1G5CollectionService.isG5WarmingUp() || (Ob1G5CollectionService.isPendingStart())) && !Ob1G5CollectionService.isCollecting()) {
             double timeleft = (SensorDays.get().getWarmupMs() - JoH.msSince(SensorDays.get().getStart())) / 60000.0;
+            Log.d(TAG, "sendMessage: timeleft = " + timeleft);
             message = String.format("Wait %.1fm",  timeleft >= 0.0 ? timeleft : 0.0);
+            Log.d(TAG, "sendMessage: message is" + message);
         } else {
             message = "";
         }
@@ -633,7 +636,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                 boolean highLine = getBooleanValue("pebble_high_line");
                 boolean lowLine = getBooleanValue("pebble_low_line");
 
-                String trendPeriodString = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_trend_period", "3");
+                String trendPeriodString = this.context.getApplicationContext().getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE).getString("pebble_trend_period", "3");
                 Integer trendPeriod = Integer.parseInt(trendPeriodString);
 
                 if ((trendPeriod != lastTrendPeriod) || (JoH.ratelimit("pebble-bggraphbuilder",60)))

@@ -363,7 +363,8 @@ public class PebbleDisplayTrend extends PebbleDisplayAbstract {
                 boolean highLine = getBooleanValue("pebble_high_line");
                 boolean lowLine = getBooleanValue("pebble_low_line");
 
-                String trendPeriodString = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_trend_period", "3");
+                //String trendPeriodString = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_trend_period", "3");
+                String trendPeriodString = this.context.getApplicationContext().getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE).getString("pebble_trend_period", "3");
                 Integer trendPeriod = Integer.parseInt(trendPeriodString);
 
                 if ((trendPeriod != lastTrendPeriod) || (JoH.ratelimit("pebble-bggraphbuilder",60)))
