@@ -57,9 +57,11 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 /**
  * Created by THE NIGHTSCOUT PROJECT CONTRIBUTORS (and adapted to fit the needs of this project)
  * <p/>
- * Changed by Andy (created from PebbleSync from PebbleTrend branch)
- * Later cut and pasted from xDrip-Experimental directly from the Sept 2016 beta
- * Primarily the work of John Stevens (jstevensog)
+ * This is the new xDrip Pebble Framework design that will ultimately allow any developer
+ * of Pebble watch face or app to create and not have to have their work merged into xDrip.
+ * The framework allows communications between xDrip and any Pebble face/app to work once xDrip
+ * knows the UUID of the face/app.
+ * Primarily the work of John Stevens (jstevensog) and Tristan (consp).  Mostly, consp.
  */
 public class PebbleFramework extends PebbleDisplayAbstract {
 
