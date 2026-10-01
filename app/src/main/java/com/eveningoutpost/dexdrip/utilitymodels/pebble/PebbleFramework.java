@@ -19,6 +19,7 @@ import com.eveningoutpost.dexdrip.models.BgReading;
 import com.eveningoutpost.dexdrip.models.JoH;
 import com.eveningoutpost.dexdrip.models.Sensor;
 import com.eveningoutpost.dexdrip.models.UserError.Log;
+import com.eveningoutpost.dexdrip.services.G5CollectionService;
 import com.eveningoutpost.dexdrip.services.Ob1G5CollectionService;
 import com.eveningoutpost.dexdrip.utilitymodels.BgGraphBuilder;
 import com.eveningoutpost.dexdrip.utilitymodels.BgSparklineBuilder;
@@ -239,11 +240,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         return dict;
     }
 
-    private PebbleDictionary sendSensorRemaining(PebbleDictionary dict) {
-        long TimeLeft = (long) (SensorDays.get().getRemainingSensorPeriodInMs() / 1000.0);
-        dict.addUint32(FRAMEWORK_SENSOR_TIME_LEFT, (int) TimeLeft);
-        return dict;
-    }
+
     private PebbleDictionary sendVibe(PebbleDictionary dict) {
         no_signal = ((new Date().getTime()) - Home.stale_data_millis() - this.bgReading.timestamp > 0);
 
@@ -368,6 +365,24 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         return dict;
     }
 
+    private PebbleDictionary sendSensorInfo(PebbleDictionary dict) {
+        Log.d(TAG, "Sensor data: " + SensorDays.get().getStart());
+        long start = (long) (SensorDays.get().getStart() / 1000.0);
+        long now = (long) (new Date().getTime() / 1000.0);
+        long end = (long) (now + (SensorDays.get().getRemainingSensorPeriodInMs() / 1000.0));
+        byte state = (byte) 255;
+        if (end < now) state = 2; // expired
+        else if ((SensorDays.get().getWarmupMs() - JoH.msSince(SensorDays.get().getStart())) > 0) state = 1; // warmup
+        else if (start > 0 && SensorDays.get().isValid()) state = 0; // active and valid
+        buff = ByteBuffer.allocate(9);
+        buff.putInt(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes((int) start) : (int) start);
+        buff.putInt(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes((int) end) : (int) end);
+        buff.put(8, state);
+        dict.addBytes(FRAMEWORK_SENSOR_INFO, buff.array());
+
+        return dict;
+    }
+
     private PebbleDictionary sendHighLimit(PebbleDictionary dict, boolean force) {
         boolean highLine = getBooleanValue("pebble_high_line");
         //SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
@@ -448,7 +463,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                 boolean send_pump_battery = (hb & 0x00200000) != 0;
                 boolean send_delta_value = (hb & 0x00100000) != 0;
                 boolean send_slope_arrow = (hb & 0x00080000) != 0;
-                boolean send_sensor_expiry = (hb & 0x00040000) != 0;
+                boolean send_sensor_info = (hb & 0x00040000) != 0;
                 Log.d(TAG, "Framework heartbeat: Colour=" + colour
                         + " time_series=" + time_series
                         + " time_period=" + time_period
@@ -461,12 +476,12 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                         + " send_delta_value=" + send_delta_value
                         + " send_slope_arrow=" + send_slope_arrow
                         + " send_phone_battery=" + send_phone_battery
-                        + " send_sensor_expiry=" + send_sensor_expiry
+                        + " send_sensor_info=" + send_sensor_info
                 );
 
                 PebbleDictionary dict = new PebbleDictionary();
 
-                if (send_sensor_expiry) sendSensorRemaining((dict));
+                if (send_sensor_info) sendSensorInfo((dict));
 
                 if (send_slope_arrow) sendSlope(dict, bgReading);
 
