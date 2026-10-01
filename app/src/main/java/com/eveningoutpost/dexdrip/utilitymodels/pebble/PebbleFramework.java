@@ -14,11 +14,16 @@ import com.eveningoutpost.dexdrip.BestGlucose;
 import com.eveningoutpost.dexdrip.Home;
 import com.eveningoutpost.dexdrip.cgm.medtrum.SensorState;
 import com.eveningoutpost.dexdrip.g5model.DexSessionKeeper;
+import com.eveningoutpost.dexdrip.insulin.Insulin;
+import com.eveningoutpost.dexdrip.insulin.InsulinManager;
 import com.eveningoutpost.dexdrip.models.ActiveBgAlert;
 import com.eveningoutpost.dexdrip.models.BgReading;
+import com.eveningoutpost.dexdrip.models.InsulinInjection;
 import com.eveningoutpost.dexdrip.models.JoH;
 import com.eveningoutpost.dexdrip.models.Sensor;
+import com.eveningoutpost.dexdrip.models.Treatments;
 import com.eveningoutpost.dexdrip.models.UserError.Log;
+import com.eveningoutpost.dexdrip.services.G5CollectionService;
 import com.eveningoutpost.dexdrip.services.Ob1G5CollectionService;
 import com.eveningoutpost.dexdrip.utilitymodels.BgGraphBuilder;
 import com.eveningoutpost.dexdrip.utilitymodels.BgSparklineBuilder;
@@ -27,6 +32,7 @@ import com.eveningoutpost.dexdrip.utilitymodels.Pref;
 import com.eveningoutpost.dexdrip.utilitymodels.SensorStatus;
 import com.eveningoutpost.dexdrip.utilitymodels.SimpleImageEncoder;
 import com.eveningoutpost.dexdrip.g5model.SensorDays;
+import com.eveningoutpost.dexdrip.utils.DexCollectionType;
 import com.getpebble.android.kit.PebbleKit;
 import com.getpebble.android.kit.util.PebbleDictionary;
 import com.getpebble.android.kit.util.PebbleTuple;
@@ -39,6 +45,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Dictionary;
 import java.util.List;
@@ -52,6 +59,8 @@ import android.content.Intent;
 import android.os.Bundle;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+
+import org.nightscoutfoundation.nocturne.model.Treatment;
 
 
 /**
@@ -239,11 +248,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         return dict;
     }
 
-    private PebbleDictionary sendSensorRemaining(PebbleDictionary dict) {
-        long TimeLeft = (long) (SensorDays.get().getRemainingSensorPeriodInMs() / 1000.0);
-        dict.addUint32(FRAMEWORK_SENSOR_TIME_LEFT, (int) TimeLeft);
-        return dict;
-    }
+
     private PebbleDictionary sendVibe(PebbleDictionary dict) {
         no_signal = ((new Date().getTime()) - Home.stale_data_millis() - this.bgReading.timestamp > 0);
 
@@ -368,6 +373,26 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         return dict;
     }
 
+    private PebbleDictionary sendSensorInfo(PebbleDictionary dict) {
+        Log.d(TAG, "Sensor data: " + SensorDays.get().getStart());
+        long start = (long) (SensorDays.get().getStart() / 1000.0);
+        long now = (long) (new Date().getTime() / 1000.0);
+        long end = (long) (now + (SensorDays.get().getRemainingSensorPeriodInMs() / 1000.0));
+        short interval = (short)(DexCollectionType.getCurrentSamplePeriod() / (long) 1000);
+        byte state = (byte) 255;
+        if (end < now) state = 2; // expired
+        else if ((SensorDays.get().getWarmupMs() - JoH.msSince(SensorDays.get().getStart())) > 0) state = 1; // warmup
+        else if (start > 0 && SensorDays.get().isValid()) state = 0; // active and valid
+        buff = ByteBuffer.allocate(11);
+        buff.putInt(0, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes((int) start) : (int) start);
+        buff.putInt(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Integer.reverseBytes((int) end) : (int) end);
+        buff.put(8, state);
+        buff.putShort(9, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes((short) interval) : (short) interval);
+        dict.addBytes(FRAMEWORK_SENSOR_INFO, buff.array());
+
+        return dict;
+    }
+
     private PebbleDictionary sendHighLimit(PebbleDictionary dict, boolean force) {
         boolean highLine = getBooleanValue("pebble_high_line");
         //SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
@@ -448,7 +473,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                 boolean send_pump_battery = (hb & 0x00200000) != 0;
                 boolean send_delta_value = (hb & 0x00100000) != 0;
                 boolean send_slope_arrow = (hb & 0x00080000) != 0;
-                boolean send_sensor_expiry = (hb & 0x00040000) != 0;
+                boolean send_sensor_info = (hb & 0x00040000) != 0;
                 Log.d(TAG, "Framework heartbeat: Colour=" + colour
                         + " time_series=" + time_series
                         + " time_period=" + time_period
@@ -461,12 +486,12 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                         + " send_delta_value=" + send_delta_value
                         + " send_slope_arrow=" + send_slope_arrow
                         + " send_phone_battery=" + send_phone_battery
-                        + " send_sensor_expiry=" + send_sensor_expiry
+                        + " send_sensor_info=" + send_sensor_info
                 );
 
                 PebbleDictionary dict = new PebbleDictionary();
 
-                if (send_sensor_expiry) sendSensorRemaining((dict));
+                if (send_sensor_info) sendSensorInfo((dict));
 
                 if (send_slope_arrow) sendSlope(dict, bgReading);
 
@@ -539,6 +564,35 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
             } else {
                 Log.d(TAG, "receiveData: pebble_app_version not known");
+            }
+
+            if (data.contains(FRAMEWORK_TREATMENT)) {
+                Log.i(TAG, "Trestment start");
+                // read data { basal, bolus, 2x carbs }
+                byte[] bytes = data.getBytes(FRAMEWORK_TREATMENT);
+
+                // note: for simplicity the last 4 bits are the decimal value (1/16 scale)
+                // This is not true for carbs
+                double basal = (double) ByteBuffer.wrap(Arrays.copyOfRange(bytes, 0, 2)).order(ByteOrder.LITTLE_ENDIAN).getShort() / 16.0;
+                double bolus = (double) ByteBuffer.wrap(Arrays.copyOfRange(bytes, 2, 4)).order(ByteOrder.LITTLE_ENDIAN).getShort() / 16.0;
+                double carbs = (double) ByteBuffer.wrap(Arrays.copyOfRange(bytes, 4, 6)).order(ByteOrder.LITTLE_ENDIAN).getShort();
+
+                final List<InsulinInjection> injections = new ArrayList<>();
+
+                if (basal != 0) {
+                    final Insulin basal_insulin = InsulinManager.getBasalProfile();
+                    injections.add(new InsulinInjection(basal_insulin, basal));
+                }
+                if (basal != 0) {
+                    final Insulin bolus_insulin = InsulinManager.getBolusProfile();
+                    injections.add(new InsulinInjection(bolus_insulin, bolus));
+                }
+
+                Treatments t = Treatments.create(carbs, bolus + basal, injections, JoH.tsl());
+
+                if (basal != 0 || bolus != 0 || carbs != 0) Home.staticRefreshBGCharts(); // refresh home
+                Log.i(TAG, "Treatment: " + carbs + " carbs, " + bolus + " bolus, " + basal + " basal");
+                Log.i(TAG, "Treatment created: " + t.toString());
             }
         } catch (NullPointerException e) {
             Log.e(TAG, "Got exception trying to parse data from pebble: " + e);
