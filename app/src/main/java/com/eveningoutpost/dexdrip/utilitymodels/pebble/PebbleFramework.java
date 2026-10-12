@@ -558,7 +558,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                 if (data.contains(FRAMEWORK_BGL_VALUE)) {
                     long timestamp = data.getUnsignedIntegerAsLong(FRAMEWORK_BGL_VALUE);
                     //String trendPeriodString = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_trend_period", "3");
-                    String trendPeriodString = this.context.getApplicationContext().getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE).getString("pebble_trend_period", "3");
+                    String trendPeriodString = this.context.getApplicationContext().getSharedPreferences(context.getPackageName()+"_preferences", Context.MODE_PRIVATE).getString("pebble_trend_period", "3");
                     int trendPeriod = Integer.parseInt(trendPeriodString) + 1;
                     long interval = (DexCollectionType.getCurrentSamplePeriod() / (long) 1000);
                     int expectedItems = (int) ((int)trendPeriod * 3600) / (int)interval;
@@ -700,7 +700,8 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                     AlertPlayer.getPlayer().Snooze(this.context.getApplicationContext(), duration);
                 } else if (dismiss && duration != 0) {
                     // dismiss some type of alert
-                    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this.context.getApplicationContext());
+                    //SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this.context.getApplicationContext());
+                    SharedPreferences prefs =this.context.getApplicationContext().getSharedPreferences(context.getPackageName()+"_preferences", Context.MODE_PRIVATE);
                     if (low_alert && !all_alerts) SnoozeActivity.snoozeForType(duration, SnoozeActivity.SnoozeType.LOW_ALERTS, prefs);
                     if (high_alert && !all_alerts) SnoozeActivity.snoozeForType(duration, SnoozeActivity.SnoozeType.HIGH_ALERTS, prefs);
                     if (all_alerts) SnoozeActivity.snoozeForType(duration, SnoozeActivity.SnoozeType.ALL_ALERTS, prefs);
