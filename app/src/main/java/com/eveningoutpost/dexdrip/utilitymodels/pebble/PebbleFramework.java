@@ -576,7 +576,6 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
                         Log.d(TAG, "Trend size: " + readings.size());
                         boolean ismmol = !Pref.getString("units", "mgdl").equals("mgdl");
-                        if (readings.size() == 48) readings.remove(12);
                         // strip known (timestamp is a known value or zero)
                         if (readings.get(readings.size() - 1).timestamp / 1000 == timestamp)
                             readings.remove(readings.size() - 1); // check if oldest is the timestamp
