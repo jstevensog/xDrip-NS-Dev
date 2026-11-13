@@ -699,7 +699,8 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                     AlertPlayer.getPlayer().Snooze(this.context.getApplicationContext(), duration);
                 } else if (dismiss && duration != 0) {
                     // dismiss some type of alert
-                    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this.context.getApplicationContext());
+                    //SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this.context.getApplicationContext());
+                    SharedPreferences prefs =this.context.getApplicationContext().getSharedPreferences(context.getPackageName()+"_preferences", Context.MODE_PRIVATE);
                     if (low_alert && !all_alerts) SnoozeActivity.snoozeForType(duration, SnoozeActivity.SnoozeType.LOW_ALERTS, prefs);
                     if (high_alert && !all_alerts) SnoozeActivity.snoozeForType(duration, SnoozeActivity.SnoozeType.HIGH_ALERTS, prefs);
                     if (all_alerts) SnoozeActivity.snoozeForType(duration, SnoozeActivity.SnoozeType.ALL_ALERTS, prefs);
