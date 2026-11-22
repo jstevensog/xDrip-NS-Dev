@@ -40,6 +40,7 @@ public class PebbleWatchSync extends ForegroundService {
     // apps
     public static final UUID PEBBLE_CONTROL_APP_UUID = UUID.fromString("aa14a012-96c8-4ce6-9466-4bfdf0d5a74e");
 
+    public static final UUID PEBBLE_TREATMENT_APP_UUID = UUID.fromString("55543dc9-13ce-475e-807b-8f30360e0105");
 
     private final static String TAG = PebbleWatchSync.class.getSimpleName();
     private final static long sanity_timestamp = 1478197375;
@@ -272,11 +273,20 @@ public class PebbleWatchSync extends ForegroundService {
         PebbleKit.registerReceivedDataHandler(context, new PebbleKit.PebbleDataReceiver(PEBBLE_CONTROL_APP_UUID) {
             @Override
             public void receiveData(final Context context, final int transactionId, final PebbleDictionary data) {
+                Log.d(TAG, "Reived data for pebble control app: " + transactionId);
                 getActivePebbleDisplay().receiveAppData(transactionId, data);
             }
         });
 
+        // Treatment app uses same framework as pebble framework watchface
+        PebbleKit.registerReceivedDataHandler(context, new PebbleKit.PebbleDataReceiver(PEBBLE_TREATMENT_APP_UUID) {
+            @Override
+            public void receiveData(final Context context, final int transactionId, final PebbleDictionary data) {
+                Log.d(TAG, "Reived data for pebble treatment app: " + transactionId);
+                getActivePebbleDisplay().receiveData(transactionId, data);
+            }
 
+        });
 
     }
 

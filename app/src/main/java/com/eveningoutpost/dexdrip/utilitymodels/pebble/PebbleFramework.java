@@ -205,6 +205,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
     }
 
 
+
     @Override
     public void receiveData(int transactionId, PebbleDictionary data) {
         Log.d(TAG, "receiveData: transactionId is " + String.valueOf(transactionId));
@@ -221,6 +222,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
 
     private PebbleDictionary sendMessage(PebbleDictionary dict) {
         long timeLeft = SensorDays.get().getRemainingSensorPeriodInMs();
+        double warmup_left = (SensorDays.get().getWarmupMs() - JoH.msSince(SensorDays.get().getStart())) / 60000.0;
         String message = null;
         SharedPreferences prefs = context.getApplicationContext().getSharedPreferences(context.getPackageName()+"_preferences", Context.MODE_PRIVATE);
 
@@ -229,7 +231,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
         Log.d(TAG, "sendMessage: sensorDays.isvalid = " + SensorDays.get().isValid() + ", isG5WarmingUp = " + Ob1G5CollectionService.isG5WarmingUp() + ", isPendingStart = " + Ob1G5CollectionService.isPendingStart() + ", isCollecting = " +  Ob1G5CollectionService.isCollecting());
         if (getBgReading().equalsIgnoreCase(msg)) {
             message =  prefs.getString("pebble_special_text", "BAZINGA!");
-        } else if(timeLeft < (24*3600000)) { // less than a day left
+        } else if(timeLeft < (24*3600000) && warmup_left <= 0) { // less than a day left
             long hoursLeft = Math.toIntExact(timeLeft / 3600000);
             int minutesLeft = Math.toIntExact((timeLeft - (hoursLeft * 3600000)) / 60000);
             Log.d(TAG,"timeLeft="+timeLeft+", hoursLeft="+hoursLeft+ ", minutesLeft="+minutesLeft);
@@ -559,7 +561,7 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                     long timestamp = data.getUnsignedIntegerAsLong(FRAMEWORK_BGL_VALUE);
                     //String trendPeriodString = PreferenceManager.getDefaultSharedPreferences(this.context).getString("pebble_trend_period", "3");
                     String trendPeriodString = this.context.getApplicationContext().getSharedPreferences(context.getPackageName()+"_preferences", Context.MODE_PRIVATE).getString("pebble_trend_period", "3");
-                    int trendPeriod = Integer.parseInt(trendPeriodString) + 1;
+                    int trendPeriod = Integer.parseInt(trendPeriodString);
                     long interval = (DexCollectionType.getCurrentSamplePeriod() / (long) 1000);
                     int expectedItems = (int) ((int)trendPeriod * 3600) / (int)interval;
                     Log.i(TAG, "Trend interval: " + interval + " items: " + expectedItems);
@@ -611,11 +613,21 @@ public class PebbleFramework extends PebbleDisplayAbstract {
                                     }
                                 }
                             }
+
                             // last value
                             short value = (short) Math.round(readings.get(0).getDg_mgdl());
                             if (ismmol) value |= 0x8000;
                             buff.putShort(6 + items * 2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(value) : value); // convert endianess if need be
                             items++;
+                            // detect breat at end
+                            if (items < expectedItems && readings.get(0).timestamp < System.currentTimeMillis()) {
+                                Log.d(TAG, "Gap detected, adding " + (expectedItems - items) + " items");
+                                for (; items < expectedItems; items++) {
+                                    value = ismmol ? (short) 0x8000 : (short) 0;
+                                    buff.putShort(6 + items * 2, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(value) : value); // convert endianess if need be
+
+                                }
+                            }
                             if (!doWeDisplayTrendData()) items |= 0x8000;
                             buff.putShort(4, ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? Short.reverseBytes(items) : items);
                             dict.addBytes(FRAMEWORK_BGL_SERIES, buff.array());
